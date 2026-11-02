@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Member, Relationship, NetworkGraphData } from '../types';
 import { exportBackupJson, importBackupJson } from '../utils/storage';
 import { getBirthdayCountdown, solarToLunar } from '../utils/lunarCalendar';
@@ -14,6 +14,10 @@ import {
   HardDrive,
   ShieldCheck,
   CheckCircle2,
+  Globe,
+  ExternalLink,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 interface DashboardStatsModalProps {
@@ -34,23 +38,21 @@ export const DashboardStatsModal: React.FC<DashboardStatsModalProps> = ({
   onSelectMember,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
 
   const totalMembers = network.members.length;
   const totalRelationships = network.relationships.length;
 
-  // Calculate network density
   const maxPossibleEdges = totalMembers > 1 ? (totalMembers * (totalMembers - 1)) / 2 : 1;
   const density = totalMembers > 1 ? ((totalRelationships / maxPossibleEdges) * 100).toFixed(1) : '0';
 
-  // Category counts
   const groupCounts = network.members.reduce<Record<string, number>>((acc, m) => {
     acc[m.group] = (acc[m.group] || 0) + 1;
     return acc;
   }, {});
 
-  // Birthday radar: scan all members with solar/lunar dates coming up within 45 days
   const upcomingBirthdays = network.members
     .map((m) => {
       const bdayField = m.customFields.find((f) => f.type === 'solar_date' || f.type === 'lunar_date');
@@ -89,9 +91,14 @@ export const DashboardStatsModal: React.FC<DashboardStatsModalProps> = ({
     reader.readAsText(file);
   };
 
-  // Estimate storage size
   const dataSizeBytes = new Blob([JSON.stringify(network)]).size;
   const dataSizeKb = (dataSizeBytes / 1024).toFixed(1);
+
+  const handleCopyGitCommand = () => {
+    navigator.clipboard.writeText('git add . && git commit -m "Deploy NexusNet to GitHub Pages" && git push');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-200">
@@ -102,7 +109,7 @@ export const DashboardStatsModal: React.FC<DashboardStatsModalProps> = ({
             <Activity className="w-5 h-5 text-sky-400" />
             <div>
               <h3 className="font-bold text-slate-100 text-sm">人際資源與網絡監控儀表板</h3>
-              <p className="text-[11px] text-slate-400">即時監控社群脈絡、生日提醒與自動化資料備份</p>
+              <p className="text-[11px] text-slate-400">即時監控社群脈絡、生日提醒、GitHub Pages 部署與備份</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-lg transition">
@@ -151,6 +158,53 @@ export const DashboardStatsModal: React.FC<DashboardStatsModalProps> = ({
                 <CheckCircle2 className="w-3 h-3" />
                 本地加密健康
               </div>
+            </div>
+          </div>
+
+          {/* GitHub Pages Deployment Support Card */}
+          <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-950/40 via-slate-900 to-slate-900 border border-indigo-500/30">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-indigo-400" />
+                <h4 className="font-semibold text-slate-200">GitHub Pages 網頁安裝與部署支援</h4>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-medium">
+                已內建自動部署工作流
+              </span>
+            </div>
+
+            <p className="text-slate-400 text-[11px] leading-relaxed mb-3">
+              本系統已完整支援 GitHub Pages 部署規範（相對基底路徑 <code className="text-sky-300">base: './'</code>、動態 Scope 快取與 <code className="text-sky-300">.github/workflows/deploy.yml</code>）。部署後享有免費 SSL/HTTPS 憑證與跨平台 PWA 安裝。
+            </p>
+
+            <div className="space-y-1.5 text-[11px] text-slate-300 bg-slate-950/70 p-3 rounded-lg border border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-400 font-bold">1.</span>
+                <span>推送到 GitHub 倉庫後，進入倉庫的 <strong>Settings → Pages</strong>。</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-400 font-bold">2.</span>
+                <span>在 <strong>Build and deployment → Source</strong> 選擇 <strong>GitHub Actions</strong>。</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-400 font-bold">3.</span>
+                <span>GitHub 將自動構建並發布網址（如 <code className="text-sky-300">https://&lt;帳號&gt;.github.io/&lt;專案&gt;/</code>）。</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-400 font-bold">4.</span>
+                <span>以手機或電腦瀏覽器打開該網址，即可一鍵「安裝應用程式」至主畫面/桌面！</span>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between">
+              <button
+                onClick={handleCopyGitCommand}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium transition"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? '已複製 Git 推送指令！' : '複製 Git 推送指令'}</span>
+              </button>
+              <span className="text-[10px] text-slate-500">含 404 SPA 重導向保護</span>
             </div>
           </div>
 

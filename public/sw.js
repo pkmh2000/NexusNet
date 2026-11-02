@@ -1,17 +1,21 @@
-const CACHE_NAME = 'nexusnet-cache-v1';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  '/icon.svg',
-  '/icon-192.png',
-  '/icon-512.png'
-];
+const CACHE_NAME = 'nexusnet-cache-v2';
 
 self.addEventListener('install', (event) => {
+  const scope = self.registration.scope;
+  const assets = [
+    scope,
+    new URL('index.html', scope).toString(),
+    new URL('manifest.webmanifest', scope).toString(),
+    new URL('icon.svg', scope).toString(),
+    new URL('icon-192.png', scope).toString(),
+    new URL('icon-512.png', scope).toString()
+  ];
+
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE).catch(() => {});
+      return cache.addAll(assets).catch((err) => {
+        console.log('Precache fallback:', err);
+      });
     })
   );
   self.skipWaiting();
@@ -39,11 +43,13 @@ self.addEventListener('fetch', (event) => {
       if (cachedResponse) {
         return cachedResponse;
       }
-      return fetch(event.request).then((networkResponse) => {
-        return networkResponse;
-      }).catch(() => {
-        return cachedResponse;
-      });
+      return fetch(event.request)
+        .then((networkResponse) => {
+          return networkResponse;
+        })
+        .catch(() => {
+          return cachedResponse;
+        });
     })
   );
 });

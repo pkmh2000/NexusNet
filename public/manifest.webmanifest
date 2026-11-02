@@ -1,7 +1,7 @@
 {
-  "id": "/",
-  "start_url": "/",
-  "scope": "/",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
   "name": "NexusNet 人際關係網",
   "short_name": "NexusNet",
   "description": "視覺化人際脈絡管理系統，支援自由力導向與同心圓多層圖譜、自訂欄位與農曆換算、拖曳連線切斷與跨平台 PWA 安裝。",
@@ -11,25 +11,25 @@
   "background_color": "#090d16",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "./icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/icon-192.png",
+      "src": "./icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "./icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "./icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

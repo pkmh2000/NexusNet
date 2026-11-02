@@ -35,11 +35,16 @@ export function usePWAInstall() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // 註冊 Service Worker
+    // 註冊 Service Worker (支援 GitHub Pages 子路徑)
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.log('SW registration skipped or error:', err);
-      });
+      try {
+        const swUrl = new URL('sw.js', window.location.href).href;
+        navigator.serviceWorker.register(swUrl).catch((err) => {
+          console.log('SW registration error:', err);
+        });
+      } catch (e) {
+        console.log('SW init error:', e);
+      }
     }
 
     return () => {
