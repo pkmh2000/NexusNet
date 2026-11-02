@@ -1,23 +1,6 @@
-const CACHE_NAME = 'nexusnet-cache-v2';
+const CACHE_NAME = 'nexusnet-cache-v3-beta';
 
 self.addEventListener('install', (event) => {
-  const scope = self.registration.scope;
-  const assets = [
-    scope,
-    new URL('index.html', scope).toString(),
-    new URL('manifest.webmanifest', scope).toString(),
-    new URL('icon.svg', scope).toString(),
-    new URL('icon-192.png', scope).toString(),
-    new URL('icon-512.png', scope).toString()
-  ];
-
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(assets).catch((err) => {
-        console.log('Precache fallback:', err);
-      });
-    })
-  );
   self.skipWaiting();
 });
 
@@ -31,25 +14,49 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+
+  // Never intercept or cache dev server resources, HMR, or source modules
+  if (
+    url.pathname.includes('/@vite') ||
+    url.pathname.includes('/@fs') ||
+    url.pathname.endsWith('.tsx') ||
+    url.pathname.endsWith('.ts') ||
+    url.searchParams.has('t') ||
+    url.hostname.includes('run.app') ||
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1'
+  ) {
+    return;
+  }
+
+  // Network-first strategy for GitHub Pages production
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request)
-        .then((networkResponse) => {
-          return networkResponse;
-        })
-        .catch(() => {
-          return cachedResponse;
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
+          if (event.request.mode === 'navigate') {
+            return caches.match('./') || caches.match('index.html');
+          }
+          return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
         });
-    })
+      })
   );
 });

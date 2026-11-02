@@ -522,7 +522,11 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
 
           ctx.fillStyle = isHighlighted ? 'rgba(15, 23, 42, 0.95)' : 'rgba(15, 23, 42, 0.75)';
           ctx.beginPath();
-          ctx.roundRect(midX - textW / 2 - pad, midY - 8, textW + pad * 2, 16, 4);
+          if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(midX - textW / 2 - pad, midY - 8, textW + pad * 2, 16, 4);
+          } else {
+            ctx.rect(midX - textW / 2 - pad, midY - 8, textW + pad * 2, 16);
+          }
           ctx.fill();
 
           ctx.strokeStyle = isHighlighted ? '#60a5fa' : 'rgba(51, 65, 85, 0.8)';

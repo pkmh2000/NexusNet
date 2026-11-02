@@ -35,15 +35,34 @@ export function usePWAInstall() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // 註冊 Service Worker (支援 GitHub Pages 子路徑)
+    // Service Worker 管理：在開發/預覽環境清理快取避免白畫面，在 GitHub Pages 生產環境啟用
     if ('serviceWorker' in navigator) {
-      try {
-        const swUrl = new URL('sw.js', window.location.href).href;
-        navigator.serviceWorker.register(swUrl).catch((err) => {
-          console.log('SW registration error:', err);
-        });
-      } catch (e) {
-        console.log('SW init error:', e);
+      const isDevOrPreview =
+        import.meta.env.DEV ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname.includes('run.app');
+
+      if (isDevOrPreview) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const registration of registrations) {
+            registration.unregister();
+          }
+        }).catch(() => {});
+        if ('caches' in window) {
+          caches.keys().then((names) => {
+            for (const name of names) caches.delete(name);
+          });
+        }
+      } else {
+        try {
+          const swUrl = new URL('sw.js', window.location.href).href;
+          navigator.serviceWorker.register(swUrl).catch((err) => {
+            console.log('SW registration error:', err);
+          });
+        } catch (e) {
+          console.log('SW init error:', e);
+        }
       }
     }
 

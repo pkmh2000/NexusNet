@@ -54,13 +54,18 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
     <>
       <header className="h-14 px-4 sm:px-6 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between gap-3 sm:gap-4 z-40 shrink-0">
         {/* Zone 1: Brand Wordmark */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20">
             <Share2 className="w-4 h-4 stroke-[2.2]" />
           </div>
-          <span className="font-extrabold text-sm sm:text-base tracking-tight text-white whitespace-nowrap">
-            NexusNet <span className="font-medium text-slate-400 text-xs sm:text-sm hidden sm:inline">人際關係網</span>
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-sm sm:text-base tracking-tight text-white whitespace-nowrap">
+              NexusNet <span className="font-medium text-slate-400 text-xs sm:text-sm hidden sm:inline">人際關係網</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase bg-gradient-to-r from-sky-500/20 to-indigo-500/20 text-sky-300 border border-sky-400/30">
+              Beta
+            </span>
+          </div>
         </div>
 
         {/* Zone 2: Navigation & View Mode & Display/Edit Mode */}

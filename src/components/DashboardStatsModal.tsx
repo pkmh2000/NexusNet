@@ -39,6 +39,7 @@ export const DashboardStatsModal: React.FC<DashboardStatsModalProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [copied, setCopied] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; isError?: boolean } | null>(null);
 
   if (!isOpen) return null;
 
@@ -82,10 +83,12 @@ export const DashboardStatsModal: React.FC<DashboardStatsModalProps> = ({
         const content = event.target?.result as string;
         const restored = importBackupJson(content);
         onRestoreData(restored);
-        alert('備份還原成功！人際關係網絡已同步更新。');
-        onClose();
-      } catch (err: any) {
-        alert('匯入備份失敗：' + (err.message || '無效的備份檔案格式'));
+        setNotification({ message: '備份還原成功！人際網絡已同步更新。' });
+        setTimeout(() => setNotification(null), 3000);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : '無效的備份檔案格式';
+        setNotification({ message: '匯入備份失敗：' + msg, isError: true });
+        setTimeout(() => setNotification(null), 4000);
       }
     };
     reader.readAsText(file);
@@ -108,7 +111,12 @@ export const DashboardStatsModal: React.FC<DashboardStatsModalProps> = ({
           <div className="flex items-center gap-2.5">
             <Activity className="w-5 h-5 text-sky-400" />
             <div>
-              <h3 className="font-bold text-slate-100 text-sm">人際資源與網絡監控儀表板</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-100 text-sm">人際資源與網絡監控儀表板</h3>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-500/15 text-sky-300 border border-sky-400/30 uppercase">
+                  Beta Version
+                </span>
+              </div>
               <p className="text-[11px] text-slate-400">即時監控社群脈絡、生日提醒、GitHub Pages 部署與備份</p>
             </div>
           </div>
@@ -116,6 +124,20 @@ export const DashboardStatsModal: React.FC<DashboardStatsModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* In-app notification */}
+        {notification && (
+          <div
+            className={`px-6 py-2.5 text-xs flex items-center justify-between transition-all ${
+              notification.isError
+                ? 'bg-red-500/20 text-red-200 border-b border-red-500/30'
+                : 'bg-emerald-500/20 text-emerald-200 border-b border-emerald-500/30'
+            }`}
+          >
+            <span>{notification.message}</span>
+            <button onClick={() => setNotification(null)} className="text-slate-400 hover:text-white">✕</button>
+          </div>
+        )}
 
         {/* Content */}
         <div className="p-6 space-y-6 overflow-y-auto text-xs">
