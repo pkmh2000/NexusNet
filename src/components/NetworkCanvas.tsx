@@ -32,6 +32,7 @@ interface NetworkCanvasProps {
   allGroups: string[];
   onSelectMember: (memberId: string) => void;
   onDoubleClickMember: (member: Member) => void;
+  onOpenDrawer?: () => void;
   onSelectRelationship?: (relationshipId: string) => void;
   onRequestConnect: (sourceId: string, targetId: string) => void;
   onSeverRelationship: (relationshipId: string) => void;
@@ -66,6 +67,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   allGroups,
   onSelectMember,
   onDoubleClickMember,
+  onOpenDrawer,
   onRequestConnect,
   onSeverRelationship,
   onSetAsCenter,
@@ -86,6 +88,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   const alphaRef = useRef<number>(1.0);
   const nodesRef = useRef<Map<string, PhysicsNode>>(new Map());
   const isDraggingNodeRef = useRef<string | null>(null);
+  const dragStartPosRef = useRef<{ x: number; y: number; moved: boolean }>({ x: 0, y: 0, moved: false });
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const hoveredNodeIdRef = useRef<string | null>(null);
@@ -667,23 +670,24 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
       return dx * dx + dy * dy <= (n.radius + 6) * (n.radius + 6);
     });
 
-    // Detect DOUBLE CLICK to edit member unit
-    const now = Date.now();
     if (hitNode) {
-      if (lastClickRef.current.id === hitNode.id && now - lastClickRef.current.time < 350) {
+      const now = Date.now();
+      const isDoubleClick = lastClickRef.current.id === hitNode.id && (now - lastClickRef.current.time < 380);
+
+      if (isDoubleClick) {
+        // 點擊兩次：顯示編輯畫面
         onDoubleClickMember(hitNode.member);
         lastClickRef.current = { id: '', time: 0 };
         isDraggingNodeRef.current = null;
         return;
       }
-      lastClickRef.current = { id: hitNode.id, time: now };
-    } else {
-      lastClickRef.current = { id: '', time: 0 };
-    }
 
-    // Connecting mode in Edit mode
-    if (isConnectingMode && canvasMode === 'edit') {
-      if (hitNode) {
+      // 記錄第一次點擊
+      lastClickRef.current = { id: hitNode.id, time: now };
+      dragStartPosRef.current = { x: sx, y: sy, moved: false };
+
+      // Connecting mode in Edit mode
+      if (isConnectingMode && canvasMode === 'edit') {
         if (!connectingSourceId) {
           setConnectingSourceId(hitNode.id);
           setConnectingTargetPos(world);
@@ -693,19 +697,17 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           setConnectingTargetPos(null);
           setIsConnectingMode(false);
         }
-      } else {
-        setConnectingSourceId(null);
-        setConnectingTargetPos(null);
+        return;
       }
-      return;
-    }
 
-    if (hitNode) {
+      // 點擊一次：選中並立即允許拖曳
       isDraggingNodeRef.current = hitNode.id;
       onSelectMember(hitNode.id);
       setActiveEdgeId(null);
       reheatSimulation(0.65);
       return;
+    } else {
+      lastClickRef.current = { id: '', time: 0 };
     }
 
     // Check hit test on edges (in Edit Mode)
@@ -744,6 +746,12 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     }
 
     if (isDraggingNodeRef.current) {
+      const distMoved = Math.hypot(sx - dragStartPosRef.current.x, sy - dragStartPosRef.current.y);
+      if (distMoved > 4) {
+        dragStartPosRef.current.moved = true;
+        // 正在拖曳移動，重設雙擊計時以免拖曳放開時被判定為點擊
+        lastClickRef.current = { id: '', time: 0 };
+      }
       const draggedNode = nodesRef.current.get(isDraggingNodeRef.current);
       if (draggedNode) {
         draggedNode.x = world.x;
@@ -799,6 +807,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   const activeEdge = visibleRelationships.find((r) => r.id === activeEdgeId);
   const activeEdgeSource = activeEdge ? members.find((m) => m.id === activeEdge.sourceId) : null;
   const activeEdgeTarget = activeEdge ? members.find((m) => m.id === activeEdge.targetId) : null;
+  const selectedMember = members.find((m) => m.id === selectedMemberId) || null;
 
   const isFilteringActive = maxLayers !== 'all' || selectedGroupFilter !== 'all' || searchQuery.trim() !== '';
 
@@ -982,6 +991,48 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Selected Member Floating Action Badge */}
+      {selectedMember && (
+        <div className="absolute bottom-20 left-6 z-20 flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-slate-900/95 backdrop-blur-md border border-slate-700/80 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div
+            className="w-3 h-3 rounded-full shrink-0 ring-2 ring-white/20"
+            style={{ backgroundColor: selectedMember.avatarColor || '#3b82f6' }}
+          />
+          <div className="flex flex-col pr-1">
+            <span className="text-xs font-semibold text-white leading-tight">
+              {selectedMember.name}
+            </span>
+            <span className="text-[10px] text-slate-400 leading-tight">
+              {selectedMember.group} · 點擊拖曳 / 雙擊編輯
+            </span>
+          </div>
+          <div className="w-px h-5 bg-slate-800 mx-0.5" />
+          <button
+            onClick={() => onDoubleClickMember(selectedMember)}
+            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-sky-600/30 hover:bg-sky-600/50 text-sky-300 border border-sky-500/30 transition flex items-center gap-1"
+            title="雙擊此單元亦可直接開啟編輯視窗"
+          >
+            編輯 (雙擊)
+          </button>
+          {onOpenDrawer && (
+            <button
+              onClick={onOpenDrawer}
+              className="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
+              title="展開詳細資料面板"
+            >
+              詳細資料
+            </button>
+          )}
+          <button
+            onClick={() => onSelectMember('')}
+            className="p-1 text-slate-400 hover:text-white rounded-md transition text-xs"
+            title="取消選取"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Floating Canvas Controls HUD */}
       <div className="absolute bottom-6 left-6 flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-800 shadow-xl z-20">

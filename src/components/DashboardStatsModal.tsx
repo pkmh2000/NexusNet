@@ -174,25 +174,27 @@ export const DashboardStatsModal: React.FC<DashboardStatsModalProps> = ({
             </div>
 
             <p className="text-slate-400 text-[11px] leading-relaxed mb-3">
-              本系統已完整支援 GitHub Pages 部署規範（相對基底路徑 <code className="text-sky-300">base: './'</code>、動態 Scope 快取與 <code className="text-sky-300">.github/workflows/deploy.yml</code>）。部署後享有免費 SSL/HTTPS 憑證與跨平台 PWA 安裝。
+              本系統已完整內建 GitHub Pages 部署規範（相對基底路徑 <code className="text-sky-300">base: './'</code>、動態 Scope 快取與 <code className="text-sky-300">.github/workflows/static.yml</code>）。部署後享有免費 SSL/HTTPS 憑證與跨平台 PWA 安裝。
             </p>
 
             <div className="space-y-1.5 text-[11px] text-slate-300 bg-slate-950/70 p-3 rounded-lg border border-slate-800/80">
-              <div className="flex items-center gap-2">
-                <span className="text-indigo-400 font-bold">1.</span>
+              <div className="flex items-start gap-2">
+                <span className="text-indigo-400 font-bold shrink-0">1.</span>
                 <span>推送到 GitHub 倉庫後，進入倉庫的 <strong>Settings → Pages</strong>。</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-indigo-400 font-bold">2.</span>
-                <span>在 <strong>Build and deployment → Source</strong> 選擇 <strong>GitHub Actions</strong>。</span>
+              <div className="flex items-start gap-2">
+                <span className="text-indigo-400 font-bold shrink-0">2.</span>
+                <span>在 <strong>Build and deployment → Source</strong> 下拉選單選擇 <strong>GitHub Actions</strong>。</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-indigo-400 font-bold">3.</span>
-                <span>GitHub 將自動構建並發布網址（如 <code className="text-sky-300">https://&lt;帳號&gt;.github.io/&lt;專案&gt;/</code>）。</span>
+              <div className="flex items-start gap-2">
+                <span className="text-amber-400 font-bold shrink-0">3.</span>
+                <span>
+                  <strong>若出現建議模板（Jekyll 或 Static HTML）</strong>：請<strong>不要</strong>選擇 Jekyll。因專案已具備 <code className="text-sky-300">.github/workflows/static.yml</code>，只要推送程式碼後，Actions 分頁即會自動執行 Vite 編譯部署！若點擊 Static HTML 的 Configure，直接確認其包含 npm build 指令即可。
+                </span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-indigo-400 font-bold">4.</span>
-                <span>以手機或電腦瀏覽器打開該網址，即可一鍵「安裝應用程式」至主畫面/桌面！</span>
+              <div className="flex items-start gap-2">
+                <span className="text-indigo-400 font-bold shrink-0">4.</span>
+                <span>發布完成後瀏覽網址（如 <code className="text-sky-300">https://&lt;帳號&gt;.github.io/&lt;專案&gt;/</code>），即可一鍵安裝為 PWA 獨立桌面/手機 App！</span>
               </div>
             </div>
 

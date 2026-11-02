@@ -33,6 +33,7 @@ export default function App() {
   const [selectedGroupFilter, setSelectedGroupFilter] = useState('all');
 
   // Modals & Drawers
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [isRelationshipModalOpen, setIsRelationshipModalOpen] = useState(false);
@@ -266,6 +267,15 @@ export default function App() {
     setSearchQuery('');
   }, []);
 
+  const handleSelectMember = useCallback((memberId: string | null, openDrawer = false) => {
+    setSelectedMemberId(memberId);
+    if (openDrawer && memberId) {
+      setIsDetailDrawerOpen(true);
+    } else if (!memberId) {
+      setIsDetailDrawerOpen(false);
+    }
+  }, []);
+
   // Double-click to directly edit member
   const handleDoubleClickMember = useCallback((member: Member) => {
     setEditingMember(member);
@@ -302,7 +312,7 @@ export default function App() {
           relationships={network.relationships}
           centerMemberId={centerMemberId}
           selectedMemberId={selectedMemberId}
-          onSelectMember={setSelectedMemberId}
+          onSelectMember={(id) => handleSelectMember(id, true)}
           onSetAsCenter={handleSetAsCenter}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -333,8 +343,9 @@ export default function App() {
             searchQuery={searchQuery}
             onChangeSearchQuery={setSearchQuery}
             allGroups={allGroups}
-            onSelectMember={setSelectedMemberId}
+            onSelectMember={(id) => handleSelectMember(id, false)}
             onDoubleClickMember={handleDoubleClickMember}
+            onOpenDrawer={() => setIsDetailDrawerOpen(true)}
             onRequestConnect={handleRequestConnect}
             onSeverRelationship={handleSeverRelationship}
             onSetAsCenter={handleSetAsCenter}
@@ -351,18 +362,18 @@ export default function App() {
         </main>
 
         {/* Right Member Detail Slide-over Panel */}
-        {selectedMember && (
+        {selectedMember && isDetailDrawerOpen && (
           <div className="w-full sm:w-88 md:w-96 shrink-0 h-full z-30 shadow-2xl animate-in slide-in-from-right duration-200">
             <MemberDetailDrawer
               member={selectedMember}
               allMembers={network.members}
               relationships={network.relationships}
               isCenter={selectedMember.id === centerMemberId}
-              onClose={() => setSelectedMemberId(null)}
+              onClose={() => setIsDetailDrawerOpen(false)}
               onUpdateMember={handleUpdateMember}
               onDeleteMember={handleDeleteMember}
               onSetAsCenter={handleSetAsCenter}
-              onSelectMember={setSelectedMemberId}
+              onSelectMember={(id) => handleSelectMember(id, true)}
               onSeverRelationship={handleSeverRelationship}
               onOpenConnectModal={(srcId) => {
                 setConnectingPair({ sourceId: srcId, targetId: null });
