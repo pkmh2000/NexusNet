@@ -104,13 +104,13 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
       {/* Mobile Backdrop */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-30 lg:hidden"
+          className="fixed inset-0 bg-black/70 backdrop-blur-xs z-40 lg:hidden animate-in fade-in duration-200"
           onClick={onCloseMobile}
         />
       )}
 
       <aside
-        className={`fixed lg:static inset-y-12 sm:inset-y-14 left-0 w-80 max-w-[85vw] bg-slate-900 border-r border-slate-800 z-30 flex flex-col transition-transform duration-200 ease-in-out ${
+        className={`fixed lg:static inset-y-0 lg:inset-y-auto left-0 w-80 max-w-[88vw] bg-slate-900 border-r border-slate-800 z-50 lg:z-10 flex flex-col transition-transform duration-250 ease-in-out pb-[env(safe-area-inset-bottom,0px)] pt-[env(safe-area-inset-top,0px)] lg:pt-0 ${
           isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
         }`}
       >

@@ -1170,7 +1170,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
 
       {/* Selected Member Floating Action Badge */}
       {selectedMember && (
-        <div className="absolute bottom-20 left-6 z-20 flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-slate-900/95 backdrop-blur-md border border-slate-700/80 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150">
+        <div className="absolute bottom-32 md:bottom-20 left-3 sm:left-6 z-20 flex items-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-900/95 backdrop-blur-md border border-slate-700/80 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150 max-w-[calc(100vw-1.5rem)] overflow-x-auto">
           <div
             className="w-3 h-3 rounded-full shrink-0 ring-2 ring-white/20"
             style={{ backgroundColor: selectedMember.avatarColor || '#3b82f6' }}
@@ -1186,7 +1186,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           <div className="w-px h-5 bg-slate-800 mx-0.5" />
           <button
             onClick={() => onDoubleClickMember(selectedMember)}
-            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-sky-600/30 hover:bg-sky-600/50 text-sky-300 border border-sky-500/30 transition flex items-center gap-1"
+            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-sky-600/30 hover:bg-sky-600/50 text-sky-300 border border-sky-500/30 transition flex items-center gap-1 shrink-0"
             title="雙擊此單元亦可直接開啟編輯視窗"
           >
             編輯 (雙擊)
@@ -1194,7 +1194,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           {onOpenDrawer && (
             <button
               onClick={onOpenDrawer}
-              className="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
+              className="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition shrink-0"
               title="展開詳細資料面板"
             >
               詳細資料
@@ -1202,7 +1202,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           )}
           <button
             onClick={() => onSelectMember('')}
-            className="p-1 text-slate-400 hover:text-white rounded-md transition text-xs"
+            className="p-1 text-slate-400 hover:text-white rounded-md transition text-xs shrink-0"
             title="取消選取"
           >
             ✕
@@ -1211,7 +1211,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
       )}
 
       {/* Floating Canvas Controls HUD */}
-      <div className="absolute bottom-6 left-6 flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-800 shadow-xl z-20">
+      <div className="absolute bottom-16 md:bottom-6 left-3 sm:left-6 flex items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-800 shadow-xl z-20">
         <button
           onClick={zoomIn}
           title="放大視圖"

@@ -349,7 +349,7 @@ export default function App() {
       />
 
       {/* Main Workspace Frame */}
-      <div className="flex-1 flex relative overflow-hidden">
+      <div className="flex-1 flex relative overflow-hidden pb-14 md:pb-0">
         {/* Left Contacts Directory Sidebar */}
         <ContactsSidebar
           members={network.members}
@@ -399,10 +399,10 @@ export default function App() {
             onSetAsCenter={handleSetAsCenter}
           />
 
-          {/* Mobile Sidebar Trigger Floating Button */}
+          {/* Sidebar Trigger Floating Button (Tablet md..lg only; on mobile the bottom bar has dedicated 成員名單 tab) */}
           <button
             onClick={() => setIsMobileSidebarOpen(true)}
-            className="lg:hidden absolute bottom-6 right-6 z-20 flex items-center gap-1.5 p-3 rounded-2xl bg-sky-600 text-white shadow-xl shadow-sky-600/30"
+            className="hidden md:flex lg:hidden absolute bottom-6 right-6 z-20 items-center gap-1.5 p-3 rounded-2xl bg-sky-600 text-white shadow-xl shadow-sky-600/30"
           >
             <Users className="w-5 h-5" />
             <span className="text-xs font-semibold">成員列表</span>

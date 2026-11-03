@@ -16,6 +16,9 @@ import {
   Layers,
   ArrowRightLeft,
   Users,
+  MoreHorizontal,
+  SlidersHorizontal,
+  Check,
 } from 'lucide-react';
 
 interface TopNavbarProps {
@@ -55,27 +58,23 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSModal, setShowIOSModal] = useState(false);
+  const [showMobileActionSheet, setShowMobileActionSheet] = useState(false);
 
   return (
     <>
-      <header className="h-14 px-3 sm:px-6 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between gap-2 sm:gap-4 z-40 shrink-0">
-        {/* Zone 1: Brand Wordmark & Mobile sidebar trigger */}
+      {/* Top Header: Clean and minimal on mobile (No options, No overflow); Rich on desktop */}
+      <header className="h-12 md:h-14 px-3 sm:px-6 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 flex items-center justify-between gap-2 sm:gap-4 z-30 shrink-0 select-none">
+        {/* Brand Wordmark (Always visible, uncluttered on mobile) */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          {onToggleMobileSidebar && (
-            <button
-              onClick={onToggleMobileSidebar}
-              className="lg:hidden p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 transition"
-              title="展開成員名單"
-            >
-              <Users className="w-4 h-4" />
-            </button>
-          )}
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20">
-            <Share2 className="w-4 h-4 stroke-[2.2]" />
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20">
+            <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.2]" />
           </div>
           <div className="flex items-center gap-1.5">
             <span className="font-extrabold text-sm sm:text-base tracking-tight text-white whitespace-nowrap">
-              NexusNet <span className="font-medium text-slate-400 text-xs sm:text-sm hidden sm:inline">人際關係網</span>
+              NexusNet
+              <span className="font-medium text-slate-400 text-xs sm:text-sm hidden sm:inline ml-1.5">
+                人際關係網
+              </span>
             </span>
             <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase bg-gradient-to-r from-sky-500/20 to-indigo-500/20 text-sky-300 border border-sky-400/30">
               Beta
@@ -83,8 +82,13 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           </div>
         </div>
 
-        {/* Zone 2: Navigation & View Mode & Display/Edit Mode */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-1 max-w-2xl justify-center">
+        {/* Mobile Top Right: Non-intrusive status, strictly NO button options to avoid iOS reachability/notch collision */}
+        <div className="md:hidden flex items-center text-xs text-slate-400">
+          <span className="text-[11px] text-slate-400/80">人際脈絡管理系統</span>
+        </div>
+
+        {/* Desktop Zone 2: Navigation & View Mode & Display/Edit Mode (Hidden on mobile) */}
+        <div className="hidden md:flex items-center gap-2 sm:gap-3 flex-1 max-w-2xl justify-center">
           {/* View Mode Switcher */}
           <div className="flex items-center p-1 rounded-xl bg-slate-950/80 border border-slate-800 text-xs shrink-0">
             <button
@@ -97,7 +101,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               }`}
             >
               <Network className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">蜘蛛網</span>
+              <span>蜘蛛網</span>
             </button>
             <button
               onClick={() => onChangeViewMode('radar')}
@@ -109,7 +113,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               }`}
             >
               <Disc className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">同心圓</span>
+              <span>同心圓</span>
             </button>
           </div>
 
@@ -141,8 +145,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             </button>
           </div>
 
-          {/* Layer Depth selector in TopBar (Hidden on mobile) */}
-          <div className="hidden md:flex items-center gap-1 p-0.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs shrink-0">
+          {/* Layer Depth selector in TopBar (Desktop only) */}
+          <div className="flex items-center gap-1 p-0.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs shrink-0">
             <span className="text-[11px] text-slate-400 pl-1.5 flex items-center gap-1">
               <Layers className="w-3 h-3 text-sky-400" />
             </span>
@@ -185,7 +189,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="搜尋姓名、電話、自訂欄位..."
+              placeholder="搜尋姓名、電話、關係標籤..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               className="w-full pl-8 pr-6 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500"
@@ -201,8 +205,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           </div>
         </div>
 
-        {/* Zone 3: Actions & PWA Install */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Desktop Zone 3: Actions & PWA Install (Hidden on mobile) */}
+        <div className="hidden md:flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Cross-Device Sync Button */}
           <button
             onClick={onOpenSync}
@@ -220,7 +224,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 text-xs font-medium border border-slate-700 transition"
           >
             <Activity className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden md:inline">儀表板</span>
+            <span className="hidden lg:inline">儀表板</span>
           </button>
 
           {/* PWA Install Button */}
@@ -254,6 +258,289 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           </button>
         </div>
       </header>
+
+      {/* MOBILE BOTTOM NAVIGATION DOCK (iOS Ergonomic Thumb Zone) */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/90 px-1 py-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.6)]">
+        <div className="grid grid-cols-5 items-center gap-0.5 text-center">
+          {/* Tab 1: 成員名單 */}
+          <button
+            onClick={onToggleMobileSidebar}
+            className="flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-slate-300 active:text-sky-400 active:bg-slate-800/80 transition"
+          >
+            <Users className="w-5 h-5 text-sky-400" />
+            <span className="text-[10px] font-medium mt-1 leading-none text-slate-300">
+              成員名單
+            </span>
+          </button>
+
+          {/* Tab 2: 視圖切換 (蜘蛛網 / 同心圓) */}
+          <button
+            onClick={() => onChangeViewMode(viewMode === 'force' ? 'radar' : 'force')}
+            className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition active:bg-slate-800/80 ${
+              viewMode === 'radar' ? 'text-indigo-400 font-semibold' : 'text-slate-300'
+            }`}
+            title="點擊切換 蜘蛛網 / 同心圓視圖"
+          >
+            {viewMode === 'force' ? (
+              <Network className="w-5 h-5 text-sky-400" />
+            ) : (
+              <Disc className="w-5 h-5 text-indigo-400" />
+            )}
+            <span className="text-[10px] font-medium mt-1 leading-none">
+              {viewMode === 'force' ? '蜘蛛網' : '同心圓'}
+            </span>
+          </button>
+
+          {/* Tab 3: 層級篩選 (1層 / 2層 / 3層 / 全部) */}
+          <button
+            onClick={() => {
+              if (maxLayers === 1) onChangeMaxLayers(2);
+              else if (maxLayers === 2) onChangeMaxLayers(3);
+              else if (maxLayers === 3) onChangeMaxLayers('all');
+              else onChangeMaxLayers(1);
+            }}
+            className="flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-slate-300 active:bg-slate-800/80 transition"
+            title="點擊切換顯示層級"
+          >
+            <Layers className="w-5 h-5 text-emerald-400" />
+            <span className="text-[10px] font-medium mt-1 leading-none">
+              {maxLayers === 'all' ? '全部層級' : `${maxLayers} 層關係`}
+            </span>
+          </button>
+
+          {/* Tab 4: 畫布模式 (顯示 / 編輯) */}
+          <button
+            onClick={() => onChangeCanvasMode(canvasMode === 'display' ? 'edit' : 'display')}
+            className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition active:bg-slate-800/80 ${
+              canvasMode === 'edit' ? 'text-amber-400 font-semibold' : 'text-slate-300'
+            }`}
+            title="點擊切換 顯示模式 / 編輯連線模式"
+          >
+            {canvasMode === 'display' ? (
+              <Eye className="w-5 h-5 text-emerald-400" />
+            ) : (
+              <Edit3 className="w-5 h-5 text-amber-400" />
+            )}
+            <span className="text-[10px] font-medium mt-1 leading-none">
+              {canvasMode === 'display' ? '顯示模式' : '編輯模式'}
+            </span>
+          </button>
+
+          {/* Tab 5: 功能選單 */}
+          <button
+            onClick={() => setShowMobileActionSheet(true)}
+            className="flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-slate-300 active:text-white active:bg-slate-800/80 transition"
+          >
+            <MoreHorizontal className="w-5 h-5 text-slate-300" />
+            <span className="text-[10px] font-medium mt-1 leading-none text-slate-300">
+              功能選單
+            </span>
+          </button>
+        </div>
+      </nav>
+
+      {/* MOBILE ACTION SHEET (Bottom Drawer for Add Member, Sync, Dashboard, Search, PWA) */}
+      {showMobileActionSheet && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            onClick={() => setShowMobileActionSheet(false)}
+          />
+
+          {/* Action Sheet Panel */}
+          <div className="relative w-full bg-slate-900 border-t border-slate-700/80 rounded-t-3xl p-4 sm:p-5 shadow-2xl z-50 max-h-[85vh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom,0px))] animate-in slide-in-from-bottom duration-250">
+            {/* Sheet Handle */}
+            <div className="w-12 h-1 bg-slate-700 rounded-full mx-auto mb-4" />
+
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-sky-400" />
+                <h3 className="font-bold text-sm text-white">NexusNet 功能選單</h3>
+              </div>
+              <button
+                onClick={() => setShowMobileActionSheet(false)}
+                className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Primary Action: Add Member */}
+            <div className="pt-4 pb-3">
+              <button
+                onClick={() => {
+                  setShowMobileActionSheet(false);
+                  onOpenNewMemberModal();
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm shadow-lg shadow-sky-600/30 transition active:scale-[0.98]"
+              >
+                <Plus className="w-5 h-5 stroke-[2.5]" />
+                <span>新增人物單元</span>
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="py-2">
+              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
+                全域搜尋 (姓名、電話、自訂欄位、關係)
+              </label>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="搜尋成員姓名、電話、自訂欄位、關係標籤..."
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => onSearchChange('')}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white text-xs p-1"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Group Categories */}
+            {allGroups.length > 0 && (
+              <div className="py-2">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
+                  群組分類篩選
+                </label>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  <button
+                    onClick={() => onGroupFilterChange('all')}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                      selectedGroupFilter === 'all'
+                        ? 'bg-sky-600 text-white'
+                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    全部群組
+                  </button>
+                  {allGroups.map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => onGroupFilterChange(g)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                        selectedGroupFilter === g
+                          ? 'bg-sky-600 text-white'
+                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Layer Depth Quick Picker */}
+            <div className="py-2">
+              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
+                顯示關係層級
+              </label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { key: 1, label: '1 層關係' },
+                  { key: 2, label: '2 層關係' },
+                  { key: 3, label: '3 層關係' },
+                  { key: 'all', label: '全部脈絡' },
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    onClick={() => onChangeMaxLayers(item.key as LayerFilter)}
+                    className={`py-2 rounded-xl text-xs font-medium border flex items-center justify-center gap-1 transition ${
+                      maxLayers === item.key
+                        ? 'bg-sky-600/20 border-sky-500/50 text-sky-300 font-bold'
+                        : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {maxLayers === item.key && <Check className="w-3 h-3 text-sky-400" />}
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Utility Grid: Sync, Dashboard, Install */}
+            <div className="pt-3 pb-1 border-t border-slate-800/80 space-y-2">
+              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                資料與管理功能
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {/* Sync */}
+                <button
+                  onClick={() => {
+                    setShowMobileActionSheet(false);
+                    onOpenSync();
+                  }}
+                  className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-sky-500/30 text-left transition"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-sky-950/80 flex items-center justify-center text-sky-400 shrink-0">
+                    <ArrowRightLeft className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-200">跨裝置同步</div>
+                    <div className="text-[10px] text-slate-400">QR Code / 網址</div>
+                  </div>
+                </button>
+
+                {/* Dashboard */}
+                <button
+                  onClick={() => {
+                    setShowMobileActionSheet(false);
+                    onOpenDashboard();
+                  }}
+                  className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-left transition"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-950/60 flex items-center justify-center text-amber-400 shrink-0">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-200">數據與備份</div>
+                    <div className="text-[10px] text-slate-400">JSON 匯入匯出</div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Install PWA Option */}
+              {!isInstalled && (
+                <div className="pt-1">
+                  {isIOS ? (
+                    <button
+                      onClick={() => {
+                        setShowMobileActionSheet(false);
+                        setShowIOSModal(true);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition"
+                    >
+                      <Smartphone className="w-4 h-4" />
+                      <span>查看 iOS 加入主畫面安裝教學</span>
+                    </button>
+                  ) : isInstallable ? (
+                    <button
+                      onClick={() => {
+                        setShowMobileActionSheet(false);
+                        install();
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition"
+                    >
+                      <DownloadCloud className="w-4 h-4" />
+                      <span>安裝為手機應用程式 (PWA)</span>
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* iOS Installation Guide Modal */}
       {showIOSModal && (
