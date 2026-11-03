@@ -17,6 +17,7 @@ import { MemberDetailDrawer } from './components/MemberDetailDrawer';
 import { MemberEditModal } from './components/MemberEditModal';
 import { RelationshipModal } from './components/RelationshipModal';
 import { DashboardStatsModal } from './components/DashboardStatsModal';
+import { SyncModal } from './components/SyncModal';
 import { Users } from 'lucide-react';
 
 export default function App() {
@@ -37,12 +38,21 @@ export default function App() {
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [isRelationshipModalOpen, setIsRelationshipModalOpen] = useState(false);
+  const [editingRelationship, setEditingRelationship] = useState<Relationship | null>(null);
   const [connectingPair, setConnectingPair] = useState<{ sourceId: string | null; targetId: string | null }>({
     sourceId: null,
     targetId: null,
   });
   const [isDashboardModalOpen, setIsDashboardModalOpen] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Check URL hash on mount for one-click cross device sync link
+  useEffect(() => {
+    if (window.location.hash.includes('#sync=')) {
+      setIsSyncModalOpen(true);
+    }
+  }, []);
 
   // Auto-save to localStorage whenever network changes
   useEffect(() => {
@@ -199,55 +209,87 @@ export default function App() {
     strength: number;
     notes?: string;
   }) => {
-    const existingIndex = network.relationships.findIndex(
-      (r) =>
-        (r.sourceId === relData.sourceId && r.targetId === relData.targetId) ||
-        (r.sourceId === relData.targetId && r.targetId === relData.sourceId)
-    );
+    if (editingRelationship) {
+      // Update existing relationship
+      setNetwork((prev) => ({
+        ...prev,
+        relationships: prev.relationships.map((r) =>
+          r.id === editingRelationship.id
+            ? {
+                ...r,
+                sourceId: relData.sourceId,
+                targetId: relData.targetId,
+                label: relData.label,
+                category: relData.category,
+                strength: relData.strength,
+                notes: relData.notes,
+              }
+            : r
+        ),
+      }));
+      setEditingRelationship(null);
+    } else {
+      const existingIndex = network.relationships.findIndex(
+        (r) =>
+          (r.sourceId === relData.sourceId && r.targetId === relData.targetId) ||
+          (r.sourceId === relData.targetId && r.targetId === relData.sourceId)
+      );
 
-    if (existingIndex >= 0) {
-      setNetwork((prev) => {
-        const next = [...prev.relationships];
-        next[existingIndex] = {
-          ...next[existingIndex],
+      if (existingIndex >= 0) {
+        setNetwork((prev) => {
+          const next = [...prev.relationships];
+          next[existingIndex] = {
+            ...next[existingIndex],
+            sourceId: relData.sourceId,
+            targetId: relData.targetId,
+            label: relData.label,
+            category: relData.category,
+            strength: relData.strength,
+            notes: relData.notes,
+          };
+          return { ...prev, relationships: next };
+        });
+      } else {
+        const newRel: Relationship = {
+          id: `r-${Date.now()}`,
+          sourceId: relData.sourceId,
+          targetId: relData.targetId,
           label: relData.label,
           category: relData.category,
           strength: relData.strength,
           notes: relData.notes,
+          createdAt: Date.now(),
         };
-        return { ...prev, relationships: next };
-      });
-    } else {
-      const newRel: Relationship = {
-        id: `r-${Date.now()}`,
-        sourceId: relData.sourceId,
-        targetId: relData.targetId,
-        label: relData.label,
-        category: relData.category,
-        strength: relData.strength,
-        notes: relData.notes,
-        createdAt: Date.now(),
-      };
-      setNetwork((prev) => ({
-        ...prev,
-        relationships: [...prev.relationships, newRel],
-      }));
+        setNetwork((prev) => ({
+          ...prev,
+          relationships: [...prev.relationships, newRel],
+        }));
+      }
     }
 
     try {
       confetti({ particleCount: 30, spread: 50, origin: { y: 0.75 } });
     } catch (_) {}
-  }, [network.relationships]);
+  }, [editingRelationship, network.relationships]);
 
   const handleSeverRelationship = useCallback((relationshipId: string) => {
     setNetwork((prev) => ({
       ...prev,
       relationships: prev.relationships.filter((r) => r.id !== relationshipId),
     }));
+    setEditingRelationship((curr) => (curr?.id === relationshipId ? null : curr));
   }, []);
 
   const handleRequestConnect = useCallback((sourceId: string, targetId: string) => {
+    setEditingRelationship(null);
     setConnectingPair({ sourceId, targetId });
+    setIsRelationshipModalOpen(true);
+  }, []);
+
+  // Double-click relationship or click edit
+  const handleEditRelationship = useCallback((rel: Relationship) => {
+    setEditingRelationship(rel);
+    setConnectingPair({ sourceId: rel.sourceId, targetId: rel.targetId });
     setIsRelationshipModalOpen(true);
   }, []);
 
@@ -297,6 +339,8 @@ export default function App() {
           setIsMemberModalOpen(true);
         }}
         onOpenDashboard={() => setIsDashboardModalOpen(true)}
+        onOpenSync={() => setIsSyncModalOpen(true)}
+        onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         selectedGroupFilter={selectedGroupFilter}
@@ -312,7 +356,10 @@ export default function App() {
           relationships={network.relationships}
           centerMemberId={centerMemberId}
           selectedMemberId={selectedMemberId}
-          onSelectMember={(id) => handleSelectMember(id, true)}
+          onSelectMember={(id) => {
+            handleSelectMember(id, true);
+            setIsMobileSidebarOpen(false);
+          }}
           onSetAsCenter={handleSetAsCenter}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -345,6 +392,7 @@ export default function App() {
             allGroups={allGroups}
             onSelectMember={(id) => handleSelectMember(id, false)}
             onDoubleClickMember={handleDoubleClickMember}
+            onDoubleClickRelationship={handleEditRelationship}
             onOpenDrawer={() => setIsDetailDrawerOpen(true)}
             onRequestConnect={handleRequestConnect}
             onSeverRelationship={handleSeverRelationship}
@@ -376,9 +424,11 @@ export default function App() {
               onSelectMember={(id) => handleSelectMember(id, true)}
               onSeverRelationship={handleSeverRelationship}
               onOpenConnectModal={(srcId) => {
+                setEditingRelationship(null);
                 setConnectingPair({ sourceId: srcId, targetId: null });
                 setIsRelationshipModalOpen(true);
               }}
+              onEditRelationship={handleEditRelationship}
               onEditMemberModal={(m) => {
                 setEditingMember(m);
                 setIsMemberModalOpen(true);
@@ -396,20 +446,24 @@ export default function App() {
           setEditingMember(null);
         }}
         onSave={handleSaveMember}
+        onDelete={handleDeleteMember}
         initialMember={editingMember}
       />
 
-      {/* Relationship Connect Modal */}
+      {/* Relationship Connect / Edit Modal */}
       <RelationshipModal
         isOpen={isRelationshipModalOpen}
         sourceId={connectingPair.sourceId}
         targetId={connectingPair.targetId}
         allMembers={network.members}
+        editingRelationship={editingRelationship}
         onClose={() => {
           setIsRelationshipModalOpen(false);
+          setEditingRelationship(null);
           setConnectingPair({ sourceId: null, targetId: null });
         }}
         onSave={handleSaveRelationship}
+        onDeleteRelationship={handleSeverRelationship}
       />
 
       {/* Resource & Monitoring Dashboard Modal */}
@@ -420,6 +474,14 @@ export default function App() {
         onRestoreData={handleRestoreData}
         onResetData={handleResetData}
         onSelectMember={setSelectedMemberId}
+      />
+
+      {/* Cross-Device Sync Modal (Mobile / Tablet / Desktop) */}
+      <SyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        network={network}
+        onImportData={handleRestoreData}
       />
     </div>
   );

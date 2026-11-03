@@ -31,6 +31,7 @@ interface MemberDetailDrawerProps {
   onSelectMember: (memberId: string) => void;
   onSeverRelationship: (relationshipId: string) => void;
   onOpenConnectModal: (sourceId: string) => void;
+  onEditRelationship?: (rel: Relationship) => void;
   onEditMemberModal: (member: Member) => void;
 }
 
@@ -46,12 +47,15 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
   onSelectMember,
   onSeverRelationship,
   onOpenConnectModal,
+  onEditRelationship,
   onEditMemberModal,
 }) => {
   const [isAddingField, setIsAddingField] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<CustomFieldType>('text');
   const [newFieldValue, setNewFieldValue] = useState('');
+  const [isConfirmingDeleteMember, setIsConfirmingDeleteMember] = useState(false);
+  const [severingRelId, setSeveringRelId] = useState<string | null>(null);
 
   // Collect all relationships where this member is source or target
   const memberRelationships = relationships.filter(
@@ -407,13 +411,44 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1 ml-2">
-                      <button
-                        onClick={() => onSeverRelationship(rel.id)}
-                        title="切斷此連線"
-                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded transition"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {onEditRelationship && (
+                        <button
+                          onClick={() => onEditRelationship(rel)}
+                          title="編輯關係細節"
+                          className="p-1.5 text-slate-400 hover:text-sky-300 hover:bg-slate-800 rounded transition"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      {severingRelId === rel.id ? (
+                        <div className="flex items-center gap-1 bg-red-500/20 px-2 py-0.5 rounded-lg border border-red-500/40">
+                          <span className="text-[10px] text-red-300">確定切斷？</span>
+                          <button
+                            onClick={() => {
+                              onSeverRelationship(rel.id);
+                              setSeveringRelId(null);
+                            }}
+                            className="text-[10px] bg-red-600 hover:bg-red-500 text-white px-1.5 py-0.5 rounded font-bold"
+                          >
+                            是
+                          </button>
+                          <button
+                            onClick={() => setSeveringRelId(null)}
+                            className="text-[10px] text-slate-400 hover:text-white px-1"
+                          >
+                            否
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setSeveringRelId(rel.id)}
+                          title="切斷此連線"
+                          className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded transition"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -425,18 +460,38 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
         {/* Delete Member Footer */}
         {!isCenter && (
           <div className="pt-4 border-t border-slate-800">
-            <button
-              onClick={() => {
-                if (confirm(`確定要刪除成員「${member.name}」及其所有人際連線嗎？`)) {
-                  onDeleteMember(member.id);
-                  onClose();
-                }
-              }}
-              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium text-red-400/80 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition border border-transparent hover:border-red-500/20"
-            >
-              <UserX className="w-3.5 h-3.5" />
-              <span>刪除此聯絡人單元</span>
-            </button>
+            {isConfirmingDeleteMember ? (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 space-y-2">
+                <div className="text-xs text-red-300">
+                  確定要刪除成員「<strong className="text-white">{member.name}</strong>」嗎？此操作將同時永久切斷所有關聯連線，無法復原。
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => setIsConfirmingDeleteMember(false)}
+                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => {
+                      onDeleteMember(member.id);
+                      onClose();
+                    }}
+                    className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold"
+                  >
+                    確認刪除
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsConfirmingDeleteMember(true)}
+                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium text-red-400/80 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition border border-transparent hover:border-red-500/20"
+              >
+                <UserX className="w-3.5 h-3.5" />
+                <span>刪除此聯絡人單元</span>
+              </button>
+            )}
           </div>
         )}
       </div>

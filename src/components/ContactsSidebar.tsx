@@ -1,6 +1,6 @@
 import React from 'react';
 import { Member, Relationship, LayerFilter } from '../types';
-import { Users, ChevronRight, Compass, Search, Filter, Layers } from 'lucide-react';
+import { Users, ChevronRight, Compass, Search, Filter, Layers, X } from 'lucide-react';
 
 interface ContactsSidebarProps {
   members: Member[];
@@ -45,7 +45,27 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
     return acc;
   }, {});
 
-  // Simultaneous filter: Layer + Group + Search
+  // Pre-calculate relationship matching for search query
+  const relMatchingMap = React.useMemo(() => {
+    const map = new Map<string, string[]>();
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return map;
+    relationships.forEach((r) => {
+      const matchLabel = r.label.toLowerCase().includes(q);
+      const matchCat = r.category.toLowerCase().includes(q);
+      const matchNotes = r.notes?.toLowerCase().includes(q);
+      if (matchLabel || matchCat || matchNotes) {
+        const desc = matchLabel ? r.label : matchCat ? r.category : r.label;
+        if (!map.has(r.sourceId)) map.set(r.sourceId, []);
+        if (!map.has(r.targetId)) map.set(r.targetId, []);
+        map.get(r.sourceId)?.push(desc);
+        map.get(r.targetId)?.push(desc);
+      }
+    });
+    return map;
+  }, [relationships, searchQuery]);
+
+  // Simultaneous filter: Layer + Group + Search (including relationships!)
   const filteredMembers = members.filter((m) => {
     const isCenter = m.id === centerMemberId;
     const d = degreesMap.get(m.id) ?? 99;
@@ -60,7 +80,7 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
       return false;
     }
 
-    // 3. Search query filter
+    // 3. Search query filter (matches member name, nickname, group, notes, custom fields, OR connected relationships)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const matchName = m.name.toLowerCase().includes(q);
@@ -70,7 +90,8 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
       const matchFields = m.customFields.some(
         (f) => f.name.toLowerCase().includes(q) || f.value.toLowerCase().includes(q)
       );
-      if (!matchName && !matchNickname && !matchGroup && !matchNotes && !matchFields) {
+      const matchRel = relMatchingMap.has(m.id);
+      if (!matchName && !matchNickname && !matchGroup && !matchNotes && !matchFields && !matchRel) {
         return false;
       }
     }
@@ -79,25 +100,36 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
   });
 
   return (
-    <aside
-      className={`fixed lg:static inset-y-14 left-0 w-72 bg-slate-900 border-r border-slate-800 z-30 flex flex-col transition-transform duration-200 ease-in-out ${
-        isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      }`}
-    >
-      {/* Sidebar Header & Filters */}
-      <div className="p-3.5 border-b border-slate-800 space-y-2.5">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
-            <Users className="w-4 h-4 text-sky-400" />
-            <span>人際成員 ({filteredMembers.length}/{members.length})</span>
+    <>
+      {/* Mobile Backdrop */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-30 lg:hidden"
+          onClick={onCloseMobile}
+        />
+      )}
+
+      <aside
+        className={`fixed lg:static inset-y-12 sm:inset-y-14 left-0 w-80 max-w-[85vw] bg-slate-900 border-r border-slate-800 z-30 flex flex-col transition-transform duration-200 ease-in-out ${
+          isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        {/* Sidebar Header & Filters */}
+        <div className="p-3.5 border-b border-slate-800 space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
+              <Users className="w-4 h-4 text-sky-400" />
+              <span>人際成員 ({filteredMembers.length}/{members.length})</span>
+            </div>
+            <button
+              onClick={onCloseMobile}
+              className="lg:hidden flex items-center gap-1 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-700 transition"
+              title="關閉名單"
+            >
+              <X className="w-3.5 h-3.5 text-slate-400" />
+              <span>關閉</span>
+            </button>
           </div>
-          <button
-            onClick={onCloseMobile}
-            className="lg:hidden text-slate-400 hover:text-white text-xs px-2 py-0.5"
-          >
-            收合
-          </button>
-        </div>
 
         {/* Mobile Search input */}
         <div className="relative lg:hidden">
@@ -233,6 +265,11 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
                       <span>{member.group}</span>
                       <span>·</span>
                       <span className="font-mono text-slate-400">{connCount} 連線</span>
+                      {relMatchingMap.has(member.id) && (
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-medium">
+                          關係：{relMatchingMap.get(member.id)?.[0]}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -257,6 +294,18 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
           })
         )}
       </div>
+
+      {/* Mobile Drawer Bottom Close Button */}
+      <div className="p-3 border-t border-slate-800 lg:hidden bg-slate-900/90">
+        <button
+          onClick={onCloseMobile}
+          className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition border border-slate-700"
+        >
+          <X className="w-4 h-4 text-slate-400" />
+          <span>關閉成員列表</span>
+        </button>
+      </div>
     </aside>
-  );
+  </>
+);
 };

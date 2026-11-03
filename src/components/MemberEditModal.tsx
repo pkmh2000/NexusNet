@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Member, CustomField } from '../types';
-import { X, UserPlus, Check } from 'lucide-react';
+import { X, UserPlus, Check, Trash2, AlertTriangle } from 'lucide-react';
 
 interface MemberEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (memberData: Partial<Member>) => void;
+  onDelete?: (memberId: string) => void;
   initialMember?: Member | null;
 }
 
@@ -25,6 +26,7 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onDelete,
   initialMember,
 }) => {
   const [name, setName] = useState('');
@@ -35,8 +37,10 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
   const [company, setCompany] = useState('');
   const [birthday, setBirthday] = useState('');
   const [notes, setNotes] = useState('');
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   useEffect(() => {
+    setIsConfirmingDelete(false);
     if (initialMember) {
       setName(initialMember.name || '');
       setNickname(initialMember.nickname || '');
@@ -235,21 +239,71 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
             </div>
           </div>
 
+          {/* Confirmation Box for Deletion */}
+          {isConfirmingDelete && initialMember && (
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl space-y-2 animate-in fade-in duration-150">
+              <div className="flex items-start gap-2 text-xs text-red-300">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <span>
+                  確定要刪除成員「<strong className="text-white">{initialMember.name}</strong>」嗎？此操作將同時永久切斷所有關聯的人際連線，無法復原。
+                </span>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingDelete(false)}
+                  className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onDelete && initialMember) {
+                      onDelete(initialMember.id);
+                      onClose();
+                    }
+                  }}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-red-600/30 flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>確認立即刪除</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Footer Submit */}
-          <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-slate-400 hover:text-slate-200 transition font-medium"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-medium transition shadow-lg shadow-sky-600/20"
-            >
-              {initialMember ? '更新成員資料' : '確定新增成員'}
-            </button>
+          <div className="pt-3 flex items-center justify-between gap-2 border-t border-slate-800">
+            {initialMember && onDelete && !initialMember.isCenter ? (
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDelete(true)}
+                disabled={isConfirmingDelete}
+                className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 rounded-xl transition font-medium flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>刪除此成員單元</span>
+              </button>
+            ) : (
+              <div />
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-slate-400 hover:text-slate-200 transition font-medium text-xs"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-medium transition shadow-lg shadow-sky-600/20 text-xs"
+              >
+                {initialMember ? '更新成員資料' : '確定新增成員'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

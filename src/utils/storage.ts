@@ -1,6 +1,64 @@
 import { NetworkGraphData, Member, Relationship, BackupPayload } from '../types';
 
 const STORAGE_KEY = 'nexusnet_social_graph_v1';
+const CUSTOM_TAGS_KEY = 'nexusnet_custom_relation_tags';
+
+export const DEFAULT_RELATION_TAGS: string[] = [
+  '核心夥伴',
+  '業務合作',
+  '同窗好友',
+  '投資人',
+  'Mentor',
+  '生活摯友',
+  '家庭親屬',
+  '介紹人',
+  '合夥創辦人',
+  '同事',
+  '舊主管',
+  '技術顧問',
+  '戰略客戶',
+  '夫妻',
+  '兄弟姊妹',
+];
+
+export function loadCustomRelationTags(): string[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_TAGS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.error('Failed to load custom relation tags', err);
+    return [];
+  }
+}
+
+export function saveCustomRelationTags(tags: string[]): void {
+  try {
+    localStorage.setItem(CUSTOM_TAGS_KEY, JSON.stringify(tags));
+  } catch (err) {
+    console.error('Failed to save custom relation tags', err);
+  }
+}
+
+export function addCustomRelationTag(newTag: string): string[] {
+  const trimmed = newTag.trim();
+  if (!trimmed) return loadCustomRelationTags();
+  const current = loadCustomRelationTags();
+  if (!current.includes(trimmed) && !DEFAULT_RELATION_TAGS.includes(trimmed)) {
+    const updated = [...current, trimmed];
+    saveCustomRelationTags(updated);
+    return updated;
+  }
+  return current;
+}
+
+export function removeCustomRelationTag(tagToRemove: string): string[] {
+  const current = loadCustomRelationTags();
+  const updated = current.filter((t) => t !== tagToRemove);
+  saveCustomRelationTags(updated);
+  return updated;
+}
 
 export const INITIAL_DATA: NetworkGraphData = {
   members: [
@@ -141,6 +199,80 @@ export const INITIAL_DATA: NetworkGraphData = {
       notes: '重要旗艦企業客戶主管，曾由 Sam 在科技設計年會上牽線認識。',
       createdAt: Date.now() - 100 * 86400000,
       updatedAt: Date.now()
+    },
+    // 2度關係成員 (無與「我」直接連線，由第1層牽線)
+    {
+      id: 'm-cousin',
+      name: '林雅涵 (表妹)',
+      nickname: '雅涵',
+      avatarColor: '#f43f5e',
+      group: '親屬家人',
+      customFields: [
+        { id: 'f-80', name: '家族脈絡', type: 'text', value: '父親之胞妹長女' },
+        { id: 'f-81', name: '任職學校', type: 'company', value: '師大附中國中部英語教師' },
+        { id: 'f-82', name: '國曆生日', type: 'solar_date', value: '1995-12-03' }
+      ],
+      notes: '父親弟弟的女兒，熱衷國際教育交流，逢年過節家族大聚會常見。',
+      createdAt: Date.now() - 90 * 86400000,
+      updatedAt: Date.now()
+    },
+    {
+      id: 'm-investor-partner',
+      name: 'Mark Lee (合夥人)',
+      nickname: 'Mark',
+      avatarColor: '#d97706',
+      group: '商務合作',
+      customFields: [
+        { id: 'f-90', name: '現任職稱', type: 'company', value: 'Vertex Horizon 矽谷管理總監' },
+        { id: 'f-91', name: '常駐城市', type: 'text', value: '舊金山 / 台北' },
+        { id: 'f-92', name: '商務信箱', type: 'email', value: 'm.lee@vertexvc.io' }
+      ],
+      notes: 'Vivian 在美國基金的長期合作主管，專精海外市場落地與 IPO 前融資架構。',
+      createdAt: Date.now() - 80 * 86400000,
+      updatedAt: Date.now()
+    },
+    {
+      id: 'm-sam-colleague',
+      name: 'Alice Wu (設計主管)',
+      nickname: 'Alice',
+      avatarColor: '#a855f7',
+      group: '日常社交',
+      customFields: [
+        { id: 'f-100', name: '任職公司', type: 'company', value: 'Google 台北 UX Lead' },
+        { id: 'f-101', name: '專長領域', type: 'tag', value: 'Design Tokens, 跨平台介面, 產品策略' }
+      ],
+      notes: 'Sam 在 Google 的直屬設計總監，設計社群大會的常駐講者。',
+      createdAt: Date.now() - 60 * 86400000,
+      updatedAt: Date.now()
+    },
+    {
+      id: 'm-intern',
+      name: '周子軒 (博士生)',
+      nickname: '子軒',
+      avatarColor: '#0284c7',
+      group: '學校學緣',
+      customFields: [
+        { id: 'f-110', name: '研究題目', type: 'education', value: '大型圖譜神經網路與邊緣計算' },
+        { id: 'f-111', name: '指導教授', type: 'text', value: '郭宗德 教授' }
+      ],
+      notes: '郭教授實驗室主力博士候選人，協助 David (CTO) 進行分散式架構實驗。',
+      createdAt: Date.now() - 40 * 86400000,
+      updatedAt: Date.now()
+    },
+    // 3度關係成員 (由第2層牽線，與「我」相隔 3 層)
+    {
+      id: 'm-global-partner',
+      name: 'Lucas Vance (海外商貿)',
+      nickname: 'Lucas',
+      avatarColor: '#059669',
+      group: '商務合作',
+      customFields: [
+        { id: 'f-120', name: '機構職稱', type: 'company', value: 'Pacific Rim Trade Alliance 亞太總代表' },
+        { id: 'f-121', name: '跨國據點', type: 'text', value: '新加坡 / 東京' }
+      ],
+      notes: 'Mark Lee 在矽谷引薦的跨國渠道夥伴，可作為未來日韓東南亞市場通路顧問。',
+      createdAt: Date.now() - 30 * 86400000,
+      updatedAt: Date.now()
     }
   ],
   relationships: [
@@ -159,7 +291,17 @@ export const INITIAL_DATA: NetworkGraphData = {
     { id: 'r-12', sourceId: 'm-advisor-prof', targetId: 'm-investor', label: '學術專利諮詢顧問', category: '商務合作', strength: 4, createdAt: Date.now() },
     { id: 'r-13', sourceId: 'm-cto', targetId: 'm-investor', label: '技術盡職調查彙報', category: '職場', strength: 3, createdAt: Date.now() },
     { id: 'r-14', sourceId: 'm-friend-sam', targetId: 'm-client-eva', label: '設計社群年會引薦人', category: '社交', strength: 3, createdAt: Date.now() },
-    { id: 'r-15', sourceId: 'm-cto', targetId: 'm-friend-sam', label: '產品外包協作舊識', category: '職場', strength: 2, createdAt: Date.now() }
+    { id: 'r-15', sourceId: 'm-cto', targetId: 'm-friend-sam', label: '產品外包協作舊識', category: '職場', strength: 2, createdAt: Date.now() },
+
+    // 2度關係連線 (與第1層相連，但不與「我」直接相連)
+    { id: 'r-20', sourceId: 'm-father', targetId: 'm-cousin', label: '親戚叔姪', category: '親友', strength: 4, createdAt: Date.now() },
+    { id: 'r-21', sourceId: 'm-investor', targetId: 'm-investor-partner', label: '基金創投合夥人', category: '商務合作', strength: 5, createdAt: Date.now() },
+    { id: 'r-22', sourceId: 'm-friend-sam', targetId: 'm-sam-colleague', label: '設計團隊主管', category: '職場', strength: 4, createdAt: Date.now() },
+    { id: 'r-23', sourceId: 'm-advisor-prof', targetId: 'm-intern', label: '指導教授與研究生', category: '學校學緣', strength: 4, createdAt: Date.now() },
+    { id: 'r-24', sourceId: 'm-cto', targetId: 'm-intern', label: '技術專案導師', category: '職場', strength: 3, createdAt: Date.now() },
+
+    // 3度關係連線 (由第2層相連，與「我」相隔 3 層)
+    { id: 'r-30', sourceId: 'm-investor-partner', targetId: 'm-global-partner', label: '跨國渠道戰略夥伴', category: '商務合作', strength: 4, createdAt: Date.now() }
   ]
 };
 
@@ -172,6 +314,11 @@ export function loadNetwork(): NetworkGraphData {
     }
     const parsed = JSON.parse(raw);
     if (!parsed.members || !Array.isArray(parsed.members) || !parsed.relationships) {
+      saveNetwork(INITIAL_DATA);
+      return INITIAL_DATA;
+    }
+    // If user's stored data has <= 7 members and matches old initial data, upgrade to new multi-tier initial data
+    if (parsed.members.length <= 7 && parsed.members.some((m: any) => m.id === 'm-me')) {
       saveNetwork(INITIAL_DATA);
       return INITIAL_DATA;
     }

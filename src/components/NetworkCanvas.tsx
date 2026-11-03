@@ -8,6 +8,8 @@ import {
   Link2,
   Eye,
   Edit3,
+  Edit2,
+  Trash2,
   MousePointer,
   Layers,
   Filter,
@@ -32,6 +34,7 @@ interface NetworkCanvasProps {
   allGroups: string[];
   onSelectMember: (memberId: string) => void;
   onDoubleClickMember: (member: Member) => void;
+  onDoubleClickRelationship?: (rel: Relationship) => void;
   onOpenDrawer?: () => void;
   onSelectRelationship?: (relationshipId: string) => void;
   onRequestConnect: (sourceId: string, targetId: string) => void;
@@ -67,6 +70,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   allGroups,
   onSelectMember,
   onDoubleClickMember,
+  onDoubleClickRelationship,
   onOpenDrawer,
   onRequestConnect,
   onSeverRelationship,
@@ -81,7 +85,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   const [connectingSourceId, setConnectingSourceId] = useState<string | null>(null);
   const [connectingTargetPos, setConnectingTargetPos] = useState<{ x: number; y: number } | null>(null);
 
-  // Selected link for quick action popup in Edit Mode
+  // Selected link for quick action popup
   const [activeEdgeId, setActiveEdgeId] = useState<string | null>(null);
 
   // Simulation physics cooling controller (prevents drifting)
@@ -92,9 +96,11 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const hoveredNodeIdRef = useRef<string | null>(null);
+  const hoveredEdgeIdRef = useRef<string | null>(null);
 
-  // Double click tracking
+  // Double click tracking for nodes & edges
   const lastClickRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
+  const lastEdgeClickRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
 
   const reheatSimulation = useCallback((intensity = 0.8) => {
     alphaRef.current = Math.max(alphaRef.current, intensity);
@@ -134,8 +140,22 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     return degrees;
   }, [members, relationships, centerMemberId]);
 
-  // Determine Visible Members by SIMULTANEOUSLY applying Layer + Group + Search filters
+  // Determine Visible Members by SIMULTANEOUSLY applying Layer + Group + Search filters (including relationships)
   const visibleMembers = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    const relMatchingMemberIds = new Set<string>();
+    if (q) {
+      relationships.forEach((r) => {
+        const matchLabel = r.label.toLowerCase().includes(q);
+        const matchCat = r.category.toLowerCase().includes(q);
+        const matchNotes = r.notes?.toLowerCase().includes(q);
+        if (matchLabel || matchCat || matchNotes) {
+          relMatchingMemberIds.add(r.sourceId);
+          relMatchingMemberIds.add(r.targetId);
+        }
+      });
+    }
+
     return members.filter((m) => {
       const isCenter = m.id === centerMemberId;
       const d = degreesMap.get(m.id) ?? 99;
@@ -150,9 +170,8 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         if (m.group !== selectedGroupFilter && !isCenter) return false;
       }
 
-      // 3. Search query filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
+      // 3. Search query filter (matches member fields OR connected relationships)
+      if (q) {
         const matchName = m.name.toLowerCase().includes(q);
         const matchNickname = m.nickname?.toLowerCase().includes(q);
         const matchGroup = m.group.toLowerCase().includes(q);
@@ -160,14 +179,15 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         const matchFields = m.customFields.some(
           (f) => f.name.toLowerCase().includes(q) || f.value.toLowerCase().includes(q)
         );
-        if (!matchName && !matchNickname && !matchGroup && !matchNotes && !matchFields) {
+        const matchRel = relMatchingMemberIds.has(m.id);
+        if (!matchName && !matchNickname && !matchGroup && !matchNotes && !matchFields && !matchRel) {
           return false;
         }
       }
 
       return true;
     });
-  }, [members, degreesMap, centerMemberId, maxLayers, selectedGroupFilter, searchQuery]);
+  }, [members, relationships, degreesMap, centerMemberId, maxLayers, selectedGroupFilter, searchQuery]);
 
   const visibleMemberIds = useMemo(() => {
     return new Set<string>(visibleMembers.map((m) => m.id));
@@ -222,10 +242,10 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     reheatSimulation(0.85);
   }, [visibleMembers, degreesMap, centerMemberId, reheatSimulation]);
 
-  // Trigger reheat when switching view modes or layers
+  // Trigger reheat when switching view modes, layers, or modifying relationships
   useEffect(() => {
     reheatSimulation(1.0);
-  }, [viewMode, maxLayers, reheatSimulation]);
+  }, [viewMode, maxLayers, relationships, reheatSimulation]);
 
   // Screen -> World coordinates
   const screenToWorld = useCallback(
@@ -366,8 +386,14 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
             const dx = t.x - s.x;
             const dy = t.y - s.y;
             const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            const targetDist = 240 - rel.strength * 22;
-            const springK = (0.04 + rel.strength * 0.01) * Math.max(alpha, 0.35);
+            // Prominent relationship strength:
+            // Strength 5 (tightest): 100px target distance, strong pull
+            // Strength 4: 145px
+            // Strength 3: 190px
+            // Strength 2: 235px
+            // Strength 1 (loosest): 280px distance, softer spring
+            const targetDist = 325 - rel.strength * 45;
+            const springK = (0.018 + rel.strength * 0.018) * Math.max(alpha, 0.4);
             const force = (dist - targetDist) * springK;
             const fx = (dx / dist) * force;
             const fy = (dy / dist) * force;
@@ -471,6 +497,36 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
       }
 
       // ==========================================
+      // 1.5 DRAW CONCENTRIC LAYER GUIDE RINGS
+      // ==========================================
+      if (centerNode) {
+        ctx.save();
+        const guideRings = [
+          { r: 140, label: '1度 · 直接人脈' },
+          { r: 260, label: '2度 · 間接拓展' },
+          { r: 380, label: '3度 · 脈絡網絡' },
+        ];
+        guideRings.forEach(({ r, label }) => {
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 6]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          if (transform.scale > 0.55) {
+            ctx.font = '10px "Plus Jakarta Sans", sans-serif';
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.3)';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(label, cx + 8, cy - r + 13);
+          }
+        });
+        ctx.restore();
+      }
+
+      // ==========================================
       // 2. DRAW EDGES / RELATIONSHIPS
       // ==========================================
       visibleRelationships.forEach((rel) => {
@@ -478,12 +534,22 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         const t = nodeMap.get(rel.targetId);
         if (!s || !t) return;
 
+        const q = searchQuery.toLowerCase().trim();
+        const matchesSearchRel = q ? (
+          rel.label.toLowerCase().includes(q) ||
+          rel.category.toLowerCase().includes(q) ||
+          (rel.notes && rel.notes.toLowerCase().includes(q))
+        ) : false;
+
+        const isHoveredEdge = rel.id === hoveredEdgeIdRef.current;
         const isHighlighted =
           s.id === selectedMemberId ||
           t.id === selectedMemberId ||
           s.id === hoveredNodeIdRef.current ||
           t.id === hoveredNodeIdRef.current ||
-          rel.id === activeEdgeId;
+          rel.id === activeEdgeId ||
+          isHoveredEdge ||
+          matchesSearchRel;
 
         ctx.beginPath();
         ctx.moveTo(s.x, s.y);
@@ -496,31 +562,54 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         else if (rel.category === '學校學緣') strokeColor = 'rgba(59, 130, 246, 0.6)';
         else if (rel.category === '社交') strokeColor = 'rgba(16, 185, 129, 0.6)';
 
-        if (isHighlighted) {
+        if (matchesSearchRel) {
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = Math.max(3.5, rel.strength * 1.5);
+          ctx.shadowColor = '#f59e0b';
+          ctx.shadowBlur = 14;
+        } else if (isHighlighted) {
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = Math.max(2.5, rel.strength * 1.2);
+          ctx.lineWidth = Math.max(2.8, rel.strength * 1.25);
           ctx.shadowColor = '#60a5fa';
           ctx.shadowBlur = 10;
         } else {
           ctx.strokeStyle = strokeColor;
-          ctx.lineWidth = Math.max(1.2, rel.strength * 0.85);
-          ctx.shadowBlur = 0;
+          ctx.lineWidth = Math.max(1.5, 0.8 + rel.strength * 0.95);
+          if (rel.strength >= 4) {
+            ctx.shadowColor = strokeColor;
+            ctx.shadowBlur = 6;
+          } else {
+            ctx.shadowBlur = 0;
+          }
+        }
+
+        if (rel.strength === 1) {
+          ctx.setLineDash([4, 4]);
+        } else {
+          ctx.setLineDash([]);
         }
         ctx.stroke();
+        ctx.setLineDash([]);
         ctx.shadowBlur = 0;
 
         // Label in midpoint
         const midX = (s.x + t.x) / 2;
         const midY = (s.y + t.y) / 2;
-        const labelText = rel.label;
+        const stars = '★'.repeat(rel.strength);
+        const labelText = `${rel.label} (${stars})`;
 
-        if (transform.scale > 0.6 || isHighlighted) {
+        if (transform.scale > 0.6 || isHighlighted || matchesSearchRel) {
           ctx.font = '10px "Plus Jakarta Sans", sans-serif';
           const textMetrics = ctx.measureText(labelText);
           const textW = textMetrics.width;
           const pad = 4;
 
-          ctx.fillStyle = isHighlighted ? 'rgba(15, 23, 42, 0.95)' : 'rgba(15, 23, 42, 0.75)';
+          ctx.fillStyle = matchesSearchRel
+            ? 'rgba(30, 27, 75, 0.95)'
+            : isHighlighted
+            ? 'rgba(15, 23, 42, 0.95)'
+            : 'rgba(15, 23, 42, 0.75)';
+
           ctx.beginPath();
           if (typeof ctx.roundRect === 'function') {
             ctx.roundRect(midX - textW / 2 - pad, midY - 8, textW + pad * 2, 16, 4);
@@ -529,11 +618,15 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           }
           ctx.fill();
 
-          ctx.strokeStyle = isHighlighted ? '#60a5fa' : 'rgba(51, 65, 85, 0.8)';
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = matchesSearchRel
+            ? '#f59e0b'
+            : isHighlighted
+            ? '#60a5fa'
+            : 'rgba(51, 65, 85, 0.8)';
+          ctx.lineWidth = matchesSearchRel ? 1.5 : 1;
           ctx.stroke();
 
-          ctx.fillStyle = isHighlighted ? '#93c5fd' : '#cbd5e1';
+          ctx.fillStyle = matchesSearchRel ? '#fbbf24' : isHighlighted ? '#93c5fd' : '#cbd5e1';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(labelText, midX, midY);
@@ -630,7 +723,8 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         if (transform.scale > 0.75) {
           ctx.font = '9px "Plus Jakarta Sans", sans-serif';
           ctx.fillStyle = '#94a3b8';
-          ctx.fillText(n.member.group, n.x, labelY + 13);
+          const degreeTag = !isCenter && n.degree < 99 ? ` · ${n.degree}度` : '';
+          ctx.fillText(`${n.member.group}${degreeTag}`, n.x, labelY + 13);
         }
       });
 
@@ -648,6 +742,8 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   }, [
     visibleMembers,
     visibleRelationships,
+    relationships,
+    searchQuery,
     centerMemberId,
     selectedMemberId,
     viewMode,
@@ -658,6 +754,58 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     connectingTargetPos,
     activeEdgeId,
   ]);
+
+  // Helper to compute distance between point (px, py) and segment (x1, y1)-(x2, y2)
+  const distanceToLineSegment = (
+    px: number,
+    py: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number
+  ): number => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+    return Math.hypot(px - projX, py - projY);
+  };
+
+  // Helper to check if a world coordinate hits any visible edge (line or midpoint label)
+  const findHitEdge = (
+    wx: number,
+    wy: number,
+    scale: number
+  ): Relationship | null => {
+    for (const rel of visibleRelationships) {
+      const s = nodesRef.current.get(rel.sourceId);
+      const t = nodesRef.current.get(rel.targetId);
+      if (!s || !t) continue;
+
+      // 1. Check midpoint label badge hit box
+      const midX = (s.x + t.x) / 2;
+      const midY = (s.y + t.y) / 2;
+      const labelW = Math.max(36, rel.label.length * 11 + 16);
+      const labelH = 22;
+      if (
+        Math.abs(wx - midX) <= labelW / 2 + 5 &&
+        Math.abs(wy - midY) <= labelH / 2 + 5
+      ) {
+        return rel;
+      }
+
+      // 2. Check line segment proximity (tolerance in screen space ~ 12px)
+      const threshold = Math.max(9, 13 / scale);
+      const dist = distanceToLineSegment(wx, wy, s.x, s.y, t.x, t.y);
+      if (dist <= threshold) {
+        return rel;
+      }
+    }
+    return null;
+  };
 
   // Pointer interactions
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -676,10 +824,11 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
 
     if (hitNode) {
       const now = Date.now();
-      const isDoubleClick = lastClickRef.current.id === hitNode.id && (now - lastClickRef.current.time < 380);
+      const isDoubleClick =
+        lastClickRef.current.id === hitNode.id && now - lastClickRef.current.time < 380;
 
       if (isDoubleClick) {
-        // 點擊兩次：顯示編輯畫面
+        // 點擊單元兩次：顯示編輯畫面
         onDoubleClickMember(hitNode.member);
         lastClickRef.current = { id: '', time: 0 };
         isDraggingNodeRef.current = null;
@@ -714,23 +863,29 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
       lastClickRef.current = { id: '', time: 0 };
     }
 
-    // Check hit test on edges (in Edit Mode)
-    if (canvasMode === 'edit') {
-      const hitEdge = visibleRelationships.find((rel) => {
-        const s = nodesRef.current.get(rel.sourceId);
-        const t = nodesRef.current.get(rel.targetId);
-        if (!s || !t) return false;
-        const midX = (s.x + t.x) / 2;
-        const midY = (s.y + t.y) / 2;
-        const dx = world.x - midX;
-        const dy = world.y - midY;
-        return dx * dx + dy * dy <= 400;
-      });
+    // Check hit test on relationship lines / label badges (works in both display and edit mode)
+    const hitEdge = findHitEdge(world.x, world.y, transform.scale);
+    if (hitEdge) {
+      const now = Date.now();
+      const isEdgeDoubleClick =
+        lastEdgeClickRef.current.id === hitEdge.id &&
+        now - lastEdgeClickRef.current.time < 380;
 
-      if (hitEdge) {
-        setActiveEdgeId(hitEdge.id);
+      if (isEdgeDoubleClick) {
+        // 雙擊連線：直接帶出人際關係編輯彈窗
+        if (onDoubleClickRelationship) {
+          onDoubleClickRelationship(hitEdge);
+        }
+        lastEdgeClickRef.current = { id: '', time: 0 };
         return;
       }
+
+      // 單擊連線：選中該連線以查看細節或切斷
+      lastEdgeClickRef.current = { id: hitEdge.id, time: now };
+      setActiveEdgeId(hitEdge.id);
+      return;
+    } else {
+      lastEdgeClickRef.current = { id: '', time: 0 };
     }
 
     isPanningRef.current = true;
@@ -783,6 +938,23 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
       return dx * dx + dy * dy <= n.radius * n.radius;
     });
     hoveredNodeIdRef.current = hit ? hit.id : null;
+
+    if (!hit) {
+      const hoveredEdge = findHitEdge(world.x, world.y, transform.scale);
+      hoveredEdgeIdRef.current = hoveredEdge ? hoveredEdge.id : null;
+    } else {
+      hoveredEdgeIdRef.current = null;
+    }
+
+    if (canvasRef.current) {
+      if (isDraggingNodeRef.current || isPanningRef.current) {
+        canvasRef.current.style.cursor = 'grabbing';
+      } else if (hoveredNodeIdRef.current || hoveredEdgeIdRef.current) {
+        canvasRef.current.style.cursor = 'pointer';
+      } else {
+        canvasRef.current.style.cursor = 'grab';
+      }
+    }
   };
 
   const handlePointerUp = () => {
@@ -882,7 +1054,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           {canvasMode === 'display' && (
             <div className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-400">
               <MousePointer className="w-3 h-3 text-sky-400" />
-              <span>雙擊單元快速編輯</span>
+              <span>雙擊單元或連線即可進行編輯</span>
             </div>
           )}
         </div>
@@ -1079,8 +1251,8 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         </button>
       </div>
 
-      {/* Selected Edge Action Floating Card (Edit Mode) */}
-      {canvasMode === 'edit' && activeEdge && activeEdgeSource && activeEdgeTarget && (
+      {/* Selected Edge Action Floating Card */}
+      {activeEdge && activeEdgeSource && activeEdgeTarget && (
         <div className="absolute top-4 right-4 z-30 p-3.5 rounded-xl bg-slate-900/95 backdrop-blur-md border border-slate-700 shadow-2xl max-w-xs text-xs animate-in fade-in duration-150">
           <div className="flex items-center justify-between pb-2 border-b border-slate-800">
             <span className="font-semibold text-slate-200">關係連線資訊</span>
@@ -1108,18 +1280,37 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
             </div>
             <div className="flex items-center justify-between">
               <span className="text-slate-400">關係緊密度</span>
-              <span className="font-mono text-amber-400">★ {activeEdge.strength}/5</span>
+              <span className="font-mono text-amber-400 font-bold">★ {activeEdge.strength}/5</span>
             </div>
+            {activeEdge.notes && (
+              <div className="pt-1 text-[11px] text-slate-400 border-t border-slate-800/60 italic">
+                備忘: {activeEdge.notes}
+              </div>
+            )}
           </div>
           <div className="pt-2 flex items-center gap-2 border-t border-slate-800">
             <button
               onClick={() => {
-                onSeverRelationship(activeEdge.id);
-                setActiveEdgeId(null);
+                if (onDoubleClickRelationship) {
+                  onDoubleClickRelationship(activeEdge);
+                }
               }}
-              className="w-full py-1.5 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-medium transition text-center"
+              className="flex-1 py-1.5 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium transition text-center flex items-center justify-center gap-1.5 shadow-sm"
             >
-              切斷此關係連線
+              <Edit2 className="w-3.5 h-3.5" />
+              <span>編輯關係細節</span>
+            </button>
+            <button
+              onClick={() => {
+                if (confirm(`確定要切斷 ${activeEdgeSource.name} 與 ${activeEdgeTarget.name} 的「${activeEdge.label}」關係連線嗎？`)) {
+                  onSeverRelationship(activeEdge.id);
+                  setActiveEdgeId(null);
+                }
+              }}
+              className="py-1.5 px-2.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-medium transition text-center"
+              title="切斷此連線"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

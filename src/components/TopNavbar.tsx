@@ -14,6 +14,8 @@ import {
   Eye,
   Edit3,
   Layers,
+  ArrowRightLeft,
+  Users,
 } from 'lucide-react';
 
 interface TopNavbarProps {
@@ -25,6 +27,8 @@ interface TopNavbarProps {
   onChangeMaxLayers: (layers: LayerFilter) => void;
   onOpenNewMemberModal: () => void;
   onOpenDashboard: () => void;
+  onOpenSync: () => void;
+  onToggleMobileSidebar?: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   selectedGroupFilter: string;
@@ -41,6 +45,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onChangeMaxLayers,
   onOpenNewMemberModal,
   onOpenDashboard,
+  onOpenSync,
+  onToggleMobileSidebar,
   searchQuery,
   onSearchChange,
   selectedGroupFilter,
@@ -52,13 +58,22 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
   return (
     <>
-      <header className="h-14 px-4 sm:px-6 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between gap-3 sm:gap-4 z-40 shrink-0">
-        {/* Zone 1: Brand Wordmark */}
-        <div className="flex items-center gap-2.5 shrink-0">
+      <header className="h-14 px-3 sm:px-6 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between gap-2 sm:gap-4 z-40 shrink-0">
+        {/* Zone 1: Brand Wordmark & Mobile sidebar trigger */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {onToggleMobileSidebar && (
+            <button
+              onClick={onToggleMobileSidebar}
+              className="lg:hidden p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 transition"
+              title="展開成員名單"
+            >
+              <Users className="w-4 h-4" />
+            </button>
+          )}
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20">
             <Share2 className="w-4 h-4 stroke-[2.2]" />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span className="font-extrabold text-sm sm:text-base tracking-tight text-white whitespace-nowrap">
               NexusNet <span className="font-medium text-slate-400 text-xs sm:text-sm hidden sm:inline">人際關係網</span>
             </span>
@@ -187,15 +202,25 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         </div>
 
         {/* Zone 3: Actions & PWA Install */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Cross-Device Sync Button */}
+          <button
+            onClick={onOpenSync}
+            title="手機、平板與桌機 跨裝置同步（QR Code / 同步碼）"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-sky-950/70 hover:bg-sky-900/80 text-sky-300 text-xs font-semibold border border-sky-500/30 transition shadow-sm"
+          >
+            <ArrowRightLeft className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline">跨裝置同步</span>
+          </button>
+
           {/* Dashboard / Telemetry Button */}
           <button
             onClick={onOpenDashboard}
             title="開啟資源與備份儀表板"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 text-xs font-medium border border-slate-700 transition"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 text-xs font-medium border border-slate-700 transition"
           >
             <Activity className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">儀表板</span>
+            <span className="hidden md:inline">儀表板</span>
           </button>
 
           {/* PWA Install Button */}
@@ -222,7 +247,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           {/* Primary Action CTA: Add Member */}
           <button
             onClick={onOpenNewMemberModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition shadow-lg shadow-sky-600/20"
+            className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition shadow-lg shadow-sky-600/20"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span className="whitespace-nowrap">新增成員</span>
