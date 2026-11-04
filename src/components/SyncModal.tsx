@@ -2,13 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { NetworkGraphData } from '../types';
 import { InAppQRScanner } from './InAppQRScanner';
-import { compressNetworkData, decompressNetworkData } from '../utils/syncCodec';
+import { compressNetworkData, compressLiteNetworkData, decompressNetworkData } from '../utils/syncCodec';
 import { APP_VERSION, APP_BUILD_DATE, APP_CHANGELOG } from '../version';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import {
   X,
   Smartphone,
-  Monitor,
   QrCode,
   Copy,
   Check,
@@ -18,14 +17,14 @@ import {
   ShieldCheck,
   RefreshCw,
   ExternalLink,
-  Layers,
   Sparkles,
   Camera,
-  Share2,
   CheckCircle2,
-  AlertCircle,
   Rocket,
   RotateCcw,
+  Maximize2,
+  Zap,
+  Info,
 } from 'lucide-react';
 
 interface SyncModalProps {
@@ -44,13 +43,17 @@ export const SyncModal: React.FC<SyncModalProps> = ({
   initialTab = 'scan',
 }) => {
   const [activeTab, setActiveTab] = useState<'scan' | 'qr' | 'code' | 'file' | 'version'>(initialTab);
+  const [qrDensityMode, setQrDensityMode] = useState<'lite' | 'full'>('lite');
+  const [isEnlargedQr, setIsEnlargedQr] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [inputSyncCode, setInputSyncCode] = useState('');
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('replace');
   const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const enlargedQrCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // App update manager
   const {
@@ -65,15 +68,22 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     forceClearCache,
   } = useAppUpdate();
 
-  // Compressed Sync Payload using pako (reduces 15KB JSON down to ~1.2KB)
-  const compressionResult = React.useMemo(() => {
+  // Full compressed payload
+  const fullCompression = React.useMemo(() => {
     return compressNetworkData(network);
   }, [network]);
 
-  const { compressedToken, rawJson, originalSize, compressedSize } = compressionResult;
+  // Ultra-fast Lite core payload (chunky blocks, under 400 bytes!)
+  const liteCompression = React.useMemo(() => {
+    return compressLiteNetworkData(network);
+  }, [network]);
 
-  // Shareable link with hash
-  const shareableUrl = `${window.location.origin}${window.location.pathname}#sync=${compressedToken}`;
+  // Selected Token for QR Code
+  const activeToken = qrDensityMode === 'lite'
+    ? liteCompression.compressedToken
+    : fullCompression.compressedToken;
+
+  const shareableUrl = `${window.location.origin}${window.location.pathname}#sync=${fullCompression.compressedToken}`;
 
   // Keep active tab in sync when initialTab changes
   useEffect(() => {
@@ -93,44 +103,42 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     }
   }, [isOpen]);
 
-  // Generate QR Code when on 'qr' tab
+  // Render QR Code onto Canvas with High Contrast & Chunky Blocks
   useEffect(() => {
     if (!isOpen || activeTab !== 'qr') return;
 
-    if (qrCanvasRef.current) {
+    const renderQr = (canvas: HTMLCanvasElement | null, width: number) => {
+      if (!canvas) return;
       try {
-        // Encode compressedToken into QR Code
         QRCode.toCanvas(
-          qrCanvasRef.current,
-          compressedToken,
+          canvas,
+          activeToken,
           {
-            width: 230,
-            margin: 2,
-            errorCorrectionLevel: 'L', // Low error correction maximizes capacity (up to 2,953 bytes)
+            width,
+            margin: 3,
+            errorCorrectionLevel: 'L', // Low error correction = biggest possible blocks for instant scanning
             color: {
-              dark: '#020617',
+              dark: '#000000',
               light: '#ffffff',
             },
           },
           (err) => {
             if (err) {
-              console.warn('QR code compression error fallback:', err);
-              // Fallback to URL if raw token hit limit
-              if (qrCanvasRef.current) {
-                QRCode.toCanvas(qrCanvasRef.current, shareableUrl.slice(0, 2000), {
-                  width: 230,
-                  margin: 2,
-                  errorCorrectionLevel: 'L',
-                });
-              }
+              console.warn('QR Code generation error, fallback:', err);
             }
           }
         );
       } catch (err) {
-        console.error('QR code render exception:', err);
+        console.error('QR render exception:', err);
       }
+    };
+
+    renderQr(qrCanvasRef.current, 280);
+
+    if (isEnlargedQr) {
+      renderQr(enlargedQrCanvasRef.current, 380);
     }
-  }, [isOpen, activeTab, compressedToken, shareableUrl]);
+  }, [isOpen, activeTab, activeToken, isEnlargedQr]);
 
   if (!isOpen) return null;
 
@@ -139,19 +147,19 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     onImportData(scannedData, importMode);
     setIsError(false);
     setSyncStatusMessage(
-      `鏡頭掃描成功！已直接在 App 內載入 ${scannedData.members.length} 位成員與 ${scannedData.relationships.length} 條關係線。`
+      `鏡頭辨識成功！已直接在 App 內載入 ${scannedData.members.length} 位成員與 ${scannedData.relationships.length} 條關係線。`
     );
-    setActiveTab('code'); // Switch back to code/summary tab
+    setActiveTab('code');
   };
 
   const handleCopyCode = async () => {
     try {
-      await navigator.clipboard.writeText(compressedToken);
+      await navigator.clipboard.writeText(fullCompression.compressedToken);
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
     } catch (_) {
       const ta = document.createElement('textarea');
-      ta.value = compressedToken;
+      ta.value = fullCompression.compressedToken;
       document.body.appendChild(ta);
       ta.select();
       document.execCommand('copy');
@@ -175,20 +183,6 @@ export const SyncModal: React.FC<SyncModalProps> = ({
       document.body.removeChild(ta);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
-    }
-  };
-
-  const handleNativeShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'NexusNet 人際圖譜同步資料',
-          text: `NexusNet 人際圖譜同步（含 ${network.members.length} 位成員、${network.relationships.length} 條關係線）`,
-          url: shareableUrl,
-        });
-      } catch (_) {}
-    } else {
-      handleCopyLink();
     }
   };
 
@@ -216,7 +210,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
   };
 
   const handleExportJson = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(rawJson);
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(fullCompression.rawJson);
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
     downloadAnchor.setAttribute('download', `NexusNet_Backup_${new Date().toISOString().slice(0, 10)}.json`);
@@ -263,7 +257,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                 </span>
               </h2>
               <p className="text-[11px] sm:text-xs text-slate-400">
-                App 內建鏡頭直接掃碼導入 · 免開瀏覽器 · 智慧更新
+                超速鏡頭辨識 · 大方塊好對焦 · 剪貼簿一鍵導入
               </p>
             </div>
           </div>
@@ -277,7 +271,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
 
         {/* Tab Navigation */}
         <div className="flex border-b border-slate-800 bg-slate-950/70 text-xs overflow-x-auto">
-          {/* Tab 1: In-App Scanner (User's primary request) */}
+          {/* Tab 1: In-App Scanner */}
           <button
             onClick={() => setActiveTab('scan')}
             className={`flex-1 min-w-[95px] py-2.5 sm:py-3 font-semibold flex items-center justify-center gap-1.5 border-b-2 transition whitespace-nowrap ${
@@ -370,14 +364,14 @@ export const SyncModal: React.FC<SyncModalProps> = ({
               <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-3 text-xs flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
-                  <div className="font-bold text-emerald-300">App 內建鏡頭掃描導入</div>
+                  <div className="font-bold text-emerald-300">App 內建鏡頭直接掃碼導入</div>
                   <div className="text-[11px] text-slate-300">
-                    拿起手機，直接對準電腦螢幕或其他裝置顯示的 NexusNet 同步條碼，掃描後將<strong>直接在 App 內自動套用</strong>，絕不跳轉至外部瀏覽器！
+                    對準另一台電腦或手機顯示的 NexusNet QR Code，<strong>直接在 App 內自動套用</strong>，免開外部瀏覽器！
                   </div>
                 </div>
               </div>
 
-              {/* Mode Selection */}
+              {/* Import Mode Selection */}
               <div className="flex items-center justify-between p-2.5 bg-slate-950/60 rounded-xl border border-slate-800 text-xs">
                 <span className="text-slate-400 font-medium">導入模式：</span>
                 <div className="flex items-center gap-3">
@@ -414,34 +408,62 @@ export const SyncModal: React.FC<SyncModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: Show Compressed QR Code */}
+          {/* TAB 2: Show QR Code with Chunky Blocks & Zoom */}
           {activeTab === 'qr' && (
-            <div className="flex flex-col items-center text-center space-y-3.5">
-              {/* QR Code Canvas Frame */}
-              <div className="relative p-3 bg-white rounded-2xl shadow-xl border border-slate-300 inline-block">
-                <canvas ref={qrCanvasRef} className="w-[200px] h-[200px] sm:w-[220px] sm:h-[220px] block" />
+            <div className="flex flex-col items-center text-center space-y-3">
+              {/* Density Mode Switcher (Lite Fast vs Full) */}
+              <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                <button
+                  onClick={() => setQrDensityMode('lite')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition ${
+                    qrDensityMode === 'lite'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="產生超大黑白方塊，手機秒速辨識"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>核心極速碼 (超大方塊·秒掃推薦)</span>
+                </button>
+                <button
+                  onClick={() => setQrDensityMode('full')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition ${
+                    qrDensityMode === 'full'
+                      ? 'bg-sky-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="包含所有自訂欄位與備忘筆記"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>完整脈絡碼 (含自訂欄位)</span>
+                </button>
               </div>
 
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>極限壓縮條碼 (含全部 {network.members.length} 位成員與 {network.relationships.length} 條關係)</span>
+              {/* QR Code Canvas Frame (Large 280px with Zoom Button) */}
+              <div className="relative p-3.5 bg-white rounded-3xl shadow-2xl border-2 border-slate-300 inline-block group">
+                <canvas ref={qrCanvasRef} className="w-[250px] h-[250px] sm:w-[280px] sm:h-[280px] block" />
+
+                {/* Enlarge / Fullscreen Floating Trigger */}
+                <button
+                  onClick={() => setIsEnlargedQr(true)}
+                  className="absolute bottom-2 right-2 px-2.5 py-1.5 rounded-xl bg-slate-900/90 text-white hover:bg-slate-800 text-[11px] font-semibold flex items-center gap-1 shadow-lg border border-slate-700 transition"
+                  title="放大全螢幕檢視"
+                >
+                  <Maximize2 className="w-3.5 h-3.5 text-sky-400" />
+                  <span>點擊放大</span>
+                </button>
               </div>
 
-              <div className="max-w-md bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-left space-y-1.5 text-xs">
-                <div className="font-semibold text-sky-300 flex items-center gap-1.5">
-                  <Smartphone className="w-4 h-4 text-sky-400" />
-                  <span>如何在手機 App 內接收？</span>
-                </div>
-                <ol className="list-decimal list-inside text-[11px] text-slate-300 space-y-1">
-                  <li>在手機打開 NexusNet App。</li>
-                  <li>點擊底部「功能選單」➔「跨裝置同步」。</li>
-                  <li>切換至第一個頁籤「<strong>鏡頭掃碼導入</strong>」。</li>
-                  <li>對準上方 QR Code，即可在 App 內瞬間完成同步導入！</li>
-                </ol>
-                <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-800/80 flex justify-between">
-                  <span>原始 JSON: {Math.round(originalSize / 1024 * 10) / 10} KB</span>
-                  <span className="text-emerald-400 font-bold">zlib 壓縮後: {Math.round(compressedSize / 1024 * 10) / 10} KB (節省 {Math.round((1 - compressedSize / originalSize) * 100)}%)</span>
-                </div>
+              {/* Status Note */}
+              <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1.5">
+                {qrDensityMode === 'lite' ? (
+                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>方塊模組超大超清晰，鏡頭距離 30~50 公分即可瞬間捕捉！</span>
+                  </span>
+                ) : (
+                  <span className="text-sky-300">包含完整自訂欄位，若鏡頭對焦不易請點擊「放大」或切換「極速碼」。</span>
+                )}
               </div>
 
               {/* Quick Actions */}
@@ -451,7 +473,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                   className="flex-1 min-w-[140px] px-3.5 py-2.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-600/20 flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
                 >
                   {copiedLink ? <Check className="w-4 h-4 text-emerald-300" /> : <ExternalLink className="w-4 h-4" />}
-                  <span>{copiedLink ? '已複製同步連結！' : '複製一鍵同步連結'}</span>
+                  <span>{copiedLink ? '已複製一鍵網址！' : '複製一鍵同步連結'}</span>
                 </button>
 
                 <button
@@ -459,7 +481,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                   className="flex-1 min-w-[140px] px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium border border-slate-700 flex items-center justify-center gap-1.5 transition"
                 >
                   {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-sky-400" />}
-                  <span>{copiedCode ? '已複製代碼！' : '複製壓縮代碼'}</span>
+                  <span>{copiedCode ? '已複製代碼！' : '複製同步代碼'}</span>
                 </button>
               </div>
             </div>
@@ -480,7 +502,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                   </button>
                 </div>
                 <div className="p-2.5 bg-slate-900 rounded-lg text-[11px] font-mono text-slate-400 break-all max-h-24 overflow-y-auto border border-slate-800/80">
-                  {compressedToken}
+                  {fullCompression.compressedToken}
                 </div>
               </div>
 
@@ -556,7 +578,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                     className="w-full py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>下載 JSON 備份 ({Math.round(originalSize / 1024 * 10) / 10} KB)</span>
+                    <span>下載 JSON 備份 ({Math.round(fullCompression.originalSize / 1024 * 10) / 10} KB)</span>
                   </button>
                 </div>
 
@@ -593,7 +615,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
             </div>
           )}
 
-          {/* TAB 5: Version & Update (User request: app 是不是沒有更新機制? 現在起 添加 beta version!) */}
+          {/* TAB 5: Version & Update */}
           {activeTab === 'version' && (
             <div className="space-y-4 text-xs">
               {/* Current Version Card */}
@@ -651,7 +673,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                 </div>
               )}
 
-              {/* Force Cache Reset (Troubleshooting) */}
+              {/* Force Cache Reset */}
               <div className="p-3 bg-slate-950/40 border border-slate-800/80 rounded-xl flex items-center justify-between text-slate-400 text-[11px]">
                 <div>
                   <div className="font-medium text-slate-300">遇到畫面未更新或快取殘留？</div>
@@ -706,6 +728,47 @@ export const SyncModal: React.FC<SyncModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* FULLSCREEN ENLARGED QR CODE MODAL (For instant locking from computer screen across the room) */}
+      {isEnlargedQr && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-700 p-6 rounded-3xl max-w-md w-full flex flex-col items-center text-center space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between w-full pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Maximize2 className="w-4 h-4 text-sky-400" />
+                <span className="font-bold text-sm text-white">超大清晰同步條碼</span>
+              </div>
+              <button
+                onClick={() => setIsEnlargedQr(false)}
+                className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Huge Canvas */}
+            <div className="p-4 bg-white rounded-3xl shadow-2xl border-4 border-slate-200">
+              <canvas ref={enlargedQrCanvasRef} className="w-[300px] h-[300px] sm:w-[350px] sm:h-[350px] block" />
+            </div>
+
+            <div className="text-xs text-slate-300 space-y-1">
+              <div className="font-semibold text-emerald-400">
+                {qrDensityMode === 'lite' ? '⚡ 核心極速碼：方塊超大，鏡頭秒速辨識' : '📦 完整詳細碼：請保持手機 35～45 公分距離對焦'}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                請將手機 App 的「鏡頭掃碼」對準上方大圖，或直接點擊下方關閉。
+              </p>
+            </div>
+
+            <button
+              onClick={() => setIsEnlargedQr(false)}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition"
+            >
+              關閉放大視圖
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

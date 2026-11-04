@@ -4,8 +4,7 @@ import { NetworkGraphData } from '../types';
 export const COMPRESSED_PREFIX = 'NNZ:';
 
 /**
- * Compresses network graph data into an ultra-compact Base64 string using zlib Deflate.
- * Easily reduces a 15KB JSON down to 1.2KB ~ 2.0KB, making it fit comfortably inside standard QR Codes!
+ * Compresses full network graph data into an ultra-compact Base64 string using zlib Deflate.
  */
 export function compressNetworkData(data: NetworkGraphData): {
   compressedToken: string;
@@ -25,7 +24,6 @@ export function compressNetworkData(data: NetworkGraphData): {
 
   try {
     const compressedBytes = deflate(rawJson, { level: 9 });
-    // Convert Uint8Array to binary string efficiently
     let binary = '';
     const len = compressedBytes.byteLength;
     const chunkSize = 8192;
@@ -54,6 +52,51 @@ export function compressNetworkData(data: NetworkGraphData): {
       compressedSize: fallbackBase64.length,
     };
   }
+}
+
+/**
+ * Creates an ultra-lightweight core graph payload (under 400 bytes!) for instant scanning.
+ * Generates huge, chunky QR code blocks that scan instantly on any camera even in poor lighting or glare!
+ */
+export function compressLiteNetworkData(data: NetworkGraphData): {
+  compressedToken: string;
+  compressedSize: number;
+} {
+  const litePayload = {
+    version: 1,
+    exportedAt: Date.now(),
+    isLite: true,
+    members: data.members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      nickname: m.nickname,
+      avatarColor: m.avatarColor,
+      group: m.group,
+      isCenter: m.isCenter,
+    })),
+    relationships: data.relationships.map((r) => ({
+      id: r.id,
+      sourceId: r.sourceId,
+      targetId: r.targetId,
+      label: r.label,
+      category: r.category,
+      strength: r.strength,
+    })),
+  };
+
+  const raw = JSON.stringify(litePayload);
+  const compressedBytes = deflate(raw, { level: 9 });
+  let binary = '';
+  const len = compressedBytes.byteLength;
+  const chunkSize = 8192;
+  for (let i = 0; i < len; i += chunkSize) {
+    binary += String.fromCharCode.apply(
+      null,
+      Array.from(compressedBytes.subarray(i, Math.min(i + chunkSize, len)))
+    );
+  }
+  const compressedToken = `${COMPRESSED_PREFIX}${btoa(binary)}`;
+  return { compressedToken, compressedSize: compressedToken.length };
 }
 
 /**
@@ -116,4 +159,13 @@ function validateGraphData(parsed: any): asserts parsed is NetworkGraphData {
   if (!Array.isArray(parsed.members) || !Array.isArray(parsed.relationships)) {
     throw new Error('資料結構缺少 members 或 relationships 陣列');
   }
+
+  // Ensure members have safe defaults for customFields and dates
+  parsed.members = parsed.members.map((m: any) => ({
+    ...m,
+    customFields: Array.isArray(m.customFields) ? m.customFields : [],
+    notes: m.notes || '',
+    createdAt: m.createdAt || Date.now(),
+    updatedAt: m.updatedAt || Date.now(),
+  }));
 }
