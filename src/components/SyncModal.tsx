@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
+import confetti from 'canvas-confetti';
 import { NetworkGraphData } from '../types';
 import { InAppQRScanner } from './InAppQRScanner';
 import { compressNetworkData, compressLiteNetworkData, decompressNetworkData } from '../utils/syncCodec';
@@ -51,6 +52,10 @@ export const SyncModal: React.FC<SyncModalProps> = ({
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('replace');
   const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{
+    data: NetworkGraphData;
+    source: 'camera' | 'photo' | 'clipboard' | 'code' | 'file';
+  } | null>(null);
 
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const enlargedQrCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -143,14 +148,49 @@ export const SyncModal: React.FC<SyncModalProps> = ({
 
   if (!isOpen) return null;
 
-  // In-App Scanner Success Handler
-  const handleInAppScanSuccess = (scannedData: NetworkGraphData) => {
-    onImportData(scannedData, importMode);
+  // In-App Scanner Success Handler (Directly opens confirmation prompt, NEVER silently navigates away!)
+  const handleInAppScanSuccess = (scannedData: NetworkGraphData, source?: string) => {
+    setPendingImport({
+      data: scannedData,
+      source: (source as any) || 'camera',
+    });
     setIsError(false);
+  };
+
+  // Confirm and Apply Import Handler (Maximal sensory feedback: Confetti, vibration, instant graph render)
+  const handleConfirmApplyImport = () => {
+    if (!pendingImport) return;
+
+    onImportData(pendingImport.data, importMode);
+
+    try {
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+    } catch (_) {}
+
+    if (typeof navigator.vibrate === 'function') {
+      navigator.vibrate([80, 50, 80]);
+    }
+
     setSyncStatusMessage(
-      `鏡頭辨識成功！已直接在 App 內載入 ${scannedData.members.length} 位成員與 ${scannedData.relationships.length} 條關係線。`
+      importMode === 'replace'
+        ? `🎉 同步成功！已完整覆蓋載入 ${pendingImport.data.members.length} 位成員與 ${pendingImport.data.relationships.length} 條關係線。`
+        : `🎉 合併成功！已將最新資料合併至本機圖譜中。`
     );
-    setActiveTab('code');
+    setIsError(false);
+    setPendingImport(null);
+
+    // Auto-close modal after brief celebratory moment so user sees updated canvas immediately!
+    setTimeout(() => {
+      onClose();
+    }, 450);
+  };
+
+  const handleCancelPendingImport = () => {
+    setPendingImport(null);
   };
 
   const handleCopyCode = async () => {
@@ -196,13 +236,11 @@ export const SyncModal: React.FC<SyncModalProps> = ({
 
     try {
       const parsed = decompressNetworkData(inputSyncCode);
-      onImportData(parsed, importMode);
+      setPendingImport({
+        data: parsed,
+        source: 'code',
+      });
       setIsError(false);
-      setSyncStatusMessage(
-        importMode === 'replace'
-          ? `已成功覆蓋同步！共載入 ${parsed.members.length} 位成員、${parsed.relationships.length} 條關係連線。`
-          : `已成功智慧合併！目前已同步最新資料。`
-      );
       setInputSyncCode('');
     } catch (err: any) {
       setIsError(true);
@@ -229,9 +267,11 @@ export const SyncModal: React.FC<SyncModalProps> = ({
       try {
         const content = event.target?.result as string;
         const parsed = decompressNetworkData(content);
-        onImportData(parsed, importMode);
+        setPendingImport({
+          data: parsed,
+          source: 'file',
+        });
         setIsError(false);
-        setSyncStatusMessage(`檔案匯入成功！共載入 ${parsed.members.length} 位成員。`);
       } catch (err: any) {
         setIsError(true);
         setSyncStatusMessage(`匯入失敗：${err.message}`);
@@ -243,7 +283,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="relative bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-4 sm:px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
           <div className="flex items-center gap-3">
@@ -372,39 +412,11 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                 </div>
               </div>
 
-              {/* Import Mode Selection */}
-              <div className="flex items-center justify-between p-2.5 bg-slate-950/60 rounded-xl border border-slate-800 text-xs">
-                <span className="text-slate-400 font-medium">導入模式：</span>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
-                    <input
-                      type="radio"
-                      name="scannerMode"
-                      value="replace"
-                      checked={importMode === 'replace'}
-                      onChange={() => setImportMode('replace')}
-                      className="accent-sky-500"
-                    />
-                    <span>完全覆蓋 (推薦)</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
-                    <input
-                      type="radio"
-                      name="scannerMode"
-                      value="merge"
-                      checked={importMode === 'merge'}
-                      onChange={() => setImportMode('merge')}
-                      className="accent-sky-500"
-                    />
-                    <span>智慧合併</span>
-                  </label>
-                </div>
-              </div>
-
               {/* Live Camera Scanner */}
               <InAppQRScanner
                 onScanSuccess={handleInAppScanSuccess}
                 onClose={() => setActiveTab('code')}
+                isPaused={!!pendingImport}
               />
             </div>
           )}
@@ -772,6 +784,166 @@ export const SyncModal: React.FC<SyncModalProps> = ({
             關閉
           </button>
         </div>
+
+        {/* EXPLICIT CONFIRMATION MODAL OVERLAY */}
+        {pendingImport && (
+          <div className="absolute inset-0 z-50 bg-slate-950/95 backdrop-blur-md p-4 sm:p-6 flex flex-col justify-between animate-in fade-in zoom-in-95 duration-200">
+            <div className="space-y-4 overflow-y-auto">
+              {/* Header Banner */}
+              <div className="flex items-center gap-3 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-emerald-300">
+                    條碼解析成功！請選擇導入方式
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    {pendingImport.source === 'camera' && '📷 來自鏡頭即時掃碼辨識'}
+                    {pendingImport.source === 'photo' && '🖼️ 來自選取相片辨識'}
+                    {pendingImport.source === 'clipboard' && '📋 來自剪貼簿秒速讀取'}
+                    {pendingImport.source === 'code' && '📝 來自手動貼上同步代碼'}
+                    {pendingImport.source === 'file' && '📁 來自備份檔案'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Comparison Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Incoming Source */}
+                <div className="p-3.5 bg-slate-900 border border-emerald-500/40 rounded-2xl space-y-1.5 shadow-md">
+                  <div className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>來源新圖譜資料</span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black text-slate-100">{pendingImport.data.members.length}</span>
+                    <span className="text-xs text-slate-400">位成員</span>
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    關係連線：<strong className="text-slate-200">{pendingImport.data.relationships.length}</strong> 條
+                  </div>
+                </div>
+
+                {/* Local Existing */}
+                <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl space-y-1.5">
+                  <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-slate-500" />
+                    <span>目前本機圖譜資料</span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black text-slate-100">{network.members.length}</span>
+                    <span className="text-xs text-slate-400">位成員</span>
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    關係連線：<strong className="text-slate-200">{network.relationships.length}</strong> 條
+                  </div>
+                </div>
+              </div>
+
+              {/* Members Preview */}
+              <div className="p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl space-y-1.5">
+                <div className="text-[11px] font-semibold text-slate-400">即將導入的代表成員預覽：</div>
+                <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
+                  {pendingImport.data.members.slice(0, 8).map((m, idx) => (
+                    <span
+                      key={idx}
+                      className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 font-medium"
+                    >
+                      {m.name || '未命名'}
+                    </span>
+                  ))}
+                  {pendingImport.data.members.length > 8 && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-800/60 text-slate-400 font-medium">
+                      +{pendingImport.data.members.length - 8} 位...
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Mode Choice Selection Cards */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-slate-300">請確認導入方式：</div>
+
+                {/* Option 1: Replace */}
+                <label
+                  onClick={() => setImportMode('replace')}
+                  className={`block p-3 rounded-2xl border transition cursor-pointer text-left ${
+                    importMode === 'replace'
+                      ? 'bg-emerald-950/40 border-emerald-500 text-slate-100 shadow-lg shadow-emerald-950/50'
+                      : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="radio"
+                      name="pendingImportMode"
+                      checked={importMode === 'replace'}
+                      onChange={() => setImportMode('replace')}
+                      className="mt-1 accent-emerald-500"
+                    />
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                        <span>完全覆蓋本機 (推薦)</span>
+                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold">
+                          保證完全一致
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        以接收到的圖譜資料「完全取代」目前本機資料，兩端成員與關係將 100% 同步完全相同。
+                      </p>
+                    </div>
+                  </div>
+                </label>
+
+                {/* Option 2: Merge */}
+                <label
+                  onClick={() => setImportMode('merge')}
+                  className={`block p-3 rounded-2xl border transition cursor-pointer text-left ${
+                    importMode === 'merge'
+                      ? 'bg-sky-950/40 border-sky-500 text-slate-100 shadow-lg shadow-sky-950/50'
+                      : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="radio"
+                      name="pendingImportMode"
+                      checked={importMode === 'merge'}
+                      onChange={() => setImportMode('merge')}
+                      className="mt-1 accent-sky-500"
+                    />
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-slate-100">
+                        智慧合併 (保留本機既有成員)
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        保留本機目前的所有成員與關係，僅將新增加的成員與連線合併進現有圖譜。
+                      </p>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="pt-4 flex gap-2 border-t border-slate-800 mt-2">
+              <button
+                onClick={handleCancelPendingImport}
+                className="flex-1 py-3 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+              >
+                放棄 / 重新掃描
+              </button>
+              <button
+                onClick={handleConfirmApplyImport}
+                className="flex-2 py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-emerald-950 flex items-center justify-center gap-2 transition active:scale-[0.98]"
+              >
+                <Check className="w-4 h-4 text-white" />
+                <span>確認套用並導入圖譜</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* FULLSCREEN ENLARGED QR CODE MODAL (For instant locking from computer screen across the room) */}

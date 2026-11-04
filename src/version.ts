@@ -1,4 +1,4 @@
-export const APP_VERSION = 'v1.0.1-beta';
+export const APP_VERSION = 'v1.0.2-beta';
 export const APP_BUILD_DATE = '2026-11-04';
 
 export interface ChangelogItem {
@@ -9,6 +9,19 @@ export interface ChangelogItem {
 }
 
 export const APP_CHANGELOG: ChangelogItem[] = [
+  {
+    version: 'v1.0.2-beta',
+    date: '2026-11-04',
+    title: '重大優化：極致「有感」同步接收體驗 & 照片/剪貼簿解析修復',
+    features: [
+      '取景框新增高科技「動態上下雷射掃描光束」，掃描與對焦進度一目了然',
+      '掃碼/貼上/照片解析成功後，強制彈出「確認套用」卡片，詳細對比雙端成員與關係數量，再也不會迷失！',
+      '明確提供「完全覆蓋 (推薦)」與「智慧合併」二選一單選卡片，確認後一鍵套用',
+      '修復「選照片辨識」：修正二進位圖片 DataURL 讀取與高畫質相片多尺度降採樣，相簿 QR 碼完美解析',
+      '優化「讀取剪貼簿秒速導入」：直接解析剪貼簿並帶出確認視窗，不再跳轉代碼頁面造成困惑',
+      '套用成功伴隨彩帶紙花與觸覺震動回饋，自動關閉彈窗並切換至最新圖譜畫布',
+    ],
+  },
   {
     version: 'v1.0.1-beta',
     date: '2026-11-04',
