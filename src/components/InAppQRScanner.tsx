@@ -11,7 +11,7 @@ import {
   Info,
   Loader2,
 } from 'lucide-react';
-import { decompressNetworkData } from '../utils/syncCodec';
+import { decompressNetworkData, parseScannedFrame, COMPRESSED_PREFIX } from '../utils/syncCodec';
 import { NetworkGraphData } from '../types';
 
 interface InAppQRScannerProps {
@@ -45,6 +45,7 @@ export const InAppQRScanner: React.FC<InAppQRScannerProps> = ({
   const isProcessingFrameRef = useRef(false);
   const barcodeDetectorRef = useRef<any>(null);
   const scanIterationRef = useRef(0);
+  const collectedChunksRef = useRef<Map<number, string>>(new Map());
 
   // Initialize BarcodeDetector once if supported natively by browser/system
   useEffect(() => {
@@ -251,6 +252,34 @@ export const InAppQRScanner: React.FC<InAppQRScannerProps> = ({
 
         // Handle Detection Result
         if (detectedRaw) {
+          // Check if this is a chunked/paginated QR code frame (e.g. NNZ:F1/3:...)
+          const frameInfo = parseScannedFrame(detectedRaw);
+          if (frameInfo) {
+            collectedChunksRef.current.set(frameInfo.index, frameInfo.chunk);
+            const collected = collectedChunksRef.current.size;
+            const total = frameInfo.total;
+
+            if (collected < total) {
+              setScanFeedback({
+                type: 'detecting',
+                message: `分段接收中：已收集 ${collected} / ${total} 片段 (${Math.round((collected / total) * 100)}%)，請對準下一張條碼...`,
+              });
+              if (typeof navigator.vibrate === 'function') {
+                navigator.vibrate(35);
+              }
+              isProcessingFrameRef.current = false;
+              return;
+            } else {
+              // All fragments gathered! Assemble in order
+              let fullTokenPart = '';
+              for (let i = 1; i <= total; i++) {
+                fullTokenPart += collectedChunksRef.current.get(i) || '';
+              }
+              detectedRaw = `${COMPRESSED_PREFIX}${fullTokenPart}`;
+              collectedChunksRef.current.clear();
+            }
+          }
+
           try {
             const graphData = decompressNetworkData(detectedRaw);
             setScanFeedback({

@@ -34,6 +34,19 @@ export default function App() {
   const [maxLayers, setMaxLayers] = useState<LayerFilter>('all'); // 顯示層級設定：1層 / 2層 / 3層 / 全部
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroupFilter, setSelectedGroupFilter] = useState('all');
+  const [collapsedBranchMemberIds, setCollapsedBranchMemberIds] = useState<Set<string>>(new Set());
+
+  const handleToggleCollapseMemberBranches = useCallback((memberId: string) => {
+    setCollapsedBranchMemberIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(memberId)) {
+        next.delete(memberId);
+      } else {
+        next.add(memberId);
+      }
+      return next;
+    });
+  }, []);
 
   // Modals & Drawers
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
@@ -442,6 +455,8 @@ export default function App() {
           degreesMap={degreesMap}
           isMobileOpen={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          collapsedBranchMemberIds={collapsedBranchMemberIds}
+          onToggleCollapseBranches={handleToggleCollapseMemberBranches}
         />
 
         {/* Center Canvas Area */}
@@ -468,6 +483,7 @@ export default function App() {
             onRequestConnect={handleRequestConnect}
             onSeverRelationship={handleSeverRelationship}
             onSetAsCenter={handleSetAsCenter}
+            collapsedBranchMemberIds={collapsedBranchMemberIds}
           />
 
           {/* Sidebar Trigger Floating Button (Tablet md..lg only; on mobile the bottom bar has dedicated 成員名單 tab) */}
@@ -504,6 +520,8 @@ export default function App() {
                 setEditingMember(m);
                 setIsMemberModalOpen(true);
               }}
+              isBranchCollapsed={collapsedBranchMemberIds.has(selectedMember.id)}
+              onToggleCollapseBranches={handleToggleCollapseMemberBranches}
             />
           </div>
         )}

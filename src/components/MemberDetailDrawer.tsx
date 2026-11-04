@@ -17,6 +17,7 @@ import {
   UserX,
   ExternalLink,
   Share2,
+  GitFork,
 } from 'lucide-react';
 
 interface MemberDetailDrawerProps {
@@ -33,6 +34,8 @@ interface MemberDetailDrawerProps {
   onOpenConnectModal: (sourceId: string) => void;
   onEditRelationship?: (rel: Relationship) => void;
   onEditMemberModal: (member: Member) => void;
+  isBranchCollapsed?: boolean;
+  onToggleCollapseBranches?: (memberId: string) => void;
 }
 
 export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
@@ -49,6 +52,8 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
   onOpenConnectModal,
   onEditRelationship,
   onEditMemberModal,
+  isBranchCollapsed = false,
+  onToggleCollapseBranches,
 }) => {
   const [isAddingField, setIsAddingField] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
@@ -163,19 +168,40 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
       </div>
 
       {/* Action Strip */}
-      <div className="px-5 py-3 bg-slate-950/60 border-b border-slate-800/80 flex items-center justify-between gap-2">
-        <button
-          onClick={() => onSetAsCenter(member.id)}
-          disabled={isCenter}
-          className={`flex items-center gap-1.5 text-xs font-medium py-1.5 px-3 rounded-lg transition ${
-            isCenter
-              ? 'text-amber-400/50 cursor-default'
-              : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30'
-          }`}
-        >
-          <Compass className="w-3.5 h-3.5" />
-          <span>{isCenter ? '目前網絡核心' : '設為關係網中心'}</span>
-        </button>
+      <div className="px-5 py-3 bg-slate-950/60 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onSetAsCenter(member.id)}
+            disabled={isCenter}
+            className={`flex items-center gap-1.5 text-xs font-medium py-1.5 px-3 rounded-lg transition ${
+              isCenter
+                ? 'text-amber-400/50 cursor-default'
+                : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30'
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5" />
+            <span>{isCenter ? '目前網絡核心' : '設為關係網中心'}</span>
+          </button>
+
+          {!isCenter && onToggleCollapseBranches && (
+            <button
+              onClick={() => onToggleCollapseBranches(member.id)}
+              className={`flex items-center gap-1.5 text-xs font-medium py-1.5 px-3 rounded-lg border transition ${
+                isBranchCollapsed
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+              }`}
+              title={
+                isBranchCollapsed
+                  ? '目前已隱藏此人對外擴展鏈，畫布僅保留其與中心的連線（點擊展開全部）'
+                  : '隱藏此人對外所有擴展鏈（畫布僅保留其與中心點的連線）'
+              }
+            >
+              <GitFork className="w-3.5 h-3.5" />
+              <span>{isBranchCollapsed ? '已折疊對外鏈' : '隱藏對外鏈'}</span>
+            </button>
+          )}
+        </div>
 
         <button
           onClick={() => onOpenConnectModal(member.id)}

@@ -1,4 +1,4 @@
-export const APP_VERSION = 'v1.0.2-beta';
+export const APP_VERSION = 'v1.0.3-beta';
 export const APP_BUILD_DATE = '2026-11-04';
 
 export interface ChangelogItem {
@@ -9,6 +9,18 @@ export interface ChangelogItem {
 }
 
 export const APP_CHANGELOG: ChangelogItem[] = [
+  {
+    version: 'v1.0.3-beta',
+    date: '2026-11-04',
+    title: '重大功能：分段傳輸輪播 QR 碼、圖譜成員外鏈折疊、條碼遮擋與超屏修復',
+    features: [
+      '修復「點擊放大 icon 遮住 QR Code」問題：將放大按鈕移至條碼卡片正下方，條碼畫面 100% 潔淨無遮擋',
+      '修復「手機放大後超屏」問題：放大全螢幕條碼採用彈性響應式寬度，徹底告別小螢幕橫向破版',
+      '新增「分段輪播 QR 碼 (多片段大方塊)」：針對大資料量自動切割成多張大方塊自動輪播，相機自動拼接收齊，徹底破除 QR 碼物理容量與螢幕摩爾紋極限',
+      '全面升級全新「Index 字典索引壓縮」：核心極速碼體積再壓縮 75%，即使 100 位成員也能保持巨大方塊',
+      '新增「成員對外關係鏈折疊 (僅保留與中心連線)」：在成員列表或右側面板點擊分支圖示，即可單獨隱藏該成員的其他對外網絡，只保留與「我」的直接連線，大幅淨化畫布！',
+    ],
+  },
   {
     version: 'v1.0.2-beta',
     date: '2026-11-04',

@@ -3,7 +3,12 @@ import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import { NetworkGraphData } from '../types';
 import { InAppQRScanner } from './InAppQRScanner';
-import { compressNetworkData, compressLiteNetworkData, decompressNetworkData } from '../utils/syncCodec';
+import {
+  compressNetworkData,
+  compressLiteNetworkData,
+  decompressNetworkData,
+  splitTokenIntoFrames,
+} from '../utils/syncCodec';
 import { APP_VERSION, APP_BUILD_DATE, APP_CHANGELOG } from '../version';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import {
@@ -26,6 +31,11 @@ import {
   Maximize2,
   Zap,
   Info,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Pause,
+  Layers,
 } from 'lucide-react';
 
 interface SyncModalProps {
@@ -44,7 +54,9 @@ export const SyncModal: React.FC<SyncModalProps> = ({
   initialTab = 'scan',
 }) => {
   const [activeTab, setActiveTab] = useState<'scan' | 'qr' | 'code' | 'file' | 'version'>(initialTab);
-  const [qrDensityMode, setQrDensityMode] = useState<'lite' | 'full'>('lite');
+  const [qrDensityMode, setQrDensityMode] = useState<'lite' | 'chunks' | 'full'>('lite');
+  const [chunkIndex, setChunkIndex] = useState(0);
+  const [isAutoPlayChunks, setIsAutoPlayChunks] = useState(true);
   const [isEnlargedQr, setIsEnlargedQr] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -79,15 +91,37 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     return compressNetworkData(network);
   }, [network]);
 
-  // Ultra-fast Lite core payload (chunky blocks, under 400 bytes!)
+  // Ultra-fast Lite core payload (indexed dictionary, under 180 bytes!)
   const liteCompression = React.useMemo(() => {
     return compressLiteNetworkData(network);
   }, [network]);
 
+  // Multi-frame chunks for animated transmission (each chunk ~200 bytes for huge chunky squares!)
+  const chunkFrames = React.useMemo(() => {
+    return splitTokenIntoFrames(fullCompression.compressedToken, 200);
+  }, [fullCompression.compressedToken]);
+
+  // Auto carousel for chunked multi-frame mode
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'qr' || qrDensityMode !== 'chunks' || !isAutoPlayChunks || chunkFrames.length <= 1) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setChunkIndex((prev) => (prev + 1) % chunkFrames.length);
+    }, 1600);
+    return () => clearInterval(timer);
+  }, [isOpen, activeTab, qrDensityMode, isAutoPlayChunks, chunkFrames.length]);
+
   // Selected Token for QR Code
-  const activeToken = qrDensityMode === 'lite'
-    ? liteCompression.compressedToken
-    : fullCompression.compressedToken;
+  const activeToken = React.useMemo(() => {
+    if (qrDensityMode === 'lite') {
+      return liteCompression.compressedToken;
+    }
+    if (qrDensityMode === 'chunks') {
+      return chunkFrames[chunkIndex % chunkFrames.length] || chunkFrames[0];
+    }
+    return fullCompression.compressedToken;
+  }, [qrDensityMode, liteCompression.compressedToken, fullCompression.compressedToken, chunkFrames, chunkIndex]);
 
   const shareableUrl = `${window.location.origin}${window.location.pathname}#sync=${fullCompression.compressedToken}`;
 
@@ -424,8 +458,8 @@ export const SyncModal: React.FC<SyncModalProps> = ({
           {/* TAB 2: Show QR Code with Chunky Blocks & Zoom */}
           {activeTab === 'qr' && (
             <div className="flex flex-col items-center text-center space-y-3">
-              {/* Density Mode Switcher (Lite Fast vs Full) */}
-              <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+              {/* Density Mode Switcher (Lite Fast vs Chunked Carousel vs Full) */}
+              <div className="flex flex-wrap items-center justify-center gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs max-w-full">
                 <button
                   onClick={() => setQrDensityMode('lite')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition ${
@@ -433,10 +467,22 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
-                  title="產生超大黑白方塊，手機秒速辨識"
+                  title="超大黑白方塊，極速秒掃"
                 >
                   <Zap className="w-3.5 h-3.5" />
-                  <span>核心極速碼 (超大方塊·秒掃推薦)</span>
+                  <span>核心極速碼 (超大方塊·推薦)</span>
+                </button>
+                <button
+                  onClick={() => setQrDensityMode('chunks')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition ${
+                    qrDensityMode === 'chunks'
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="自動分成大方塊輪播，徹底解決螢幕摩爾紋與超長資料問題"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>分段輪播碼 ({chunkFrames.length}片段·防摩爾紋)</span>
                 </button>
                 <button
                   onClick={() => setQrDensityMode('full')}
@@ -448,34 +494,75 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                   title="包含所有自訂欄位與備忘筆記"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>完整脈絡碼 (含自訂欄位)</span>
+                  <span>完整脈絡碼</span>
                 </button>
               </div>
 
-              {/* QR Code Canvas Frame (Large 280px with Zoom Button) */}
-              <div className="relative p-3.5 bg-white rounded-3xl shadow-2xl border-2 border-slate-300 inline-block group">
-                <canvas ref={qrCanvasRef} className="w-[250px] h-[250px] sm:w-[280px] sm:h-[280px] block" />
+              {/* QR Code Canvas Frame (Completely unobstructed - NO icons covering the code!) */}
+              <div className="p-3.5 bg-white rounded-3xl shadow-2xl border-2 border-slate-300 inline-block">
+                <canvas ref={qrCanvasRef} className="w-[240px] h-[240px] sm:w-[280px] sm:h-[280px] block" />
+              </div>
 
-                {/* Enlarge / Fullscreen Floating Trigger */}
+              {/* Chunked Carousel Controls (When in chunks mode) */}
+              {qrDensityMode === 'chunks' && (
+                <div className="flex items-center justify-center gap-2 p-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                  <button
+                    onClick={() => setChunkIndex((prev) => (prev - 1 + chunkFrames.length) % chunkFrames.length)}
+                    className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800"
+                    title="上一張片段"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="font-mono text-amber-400 font-bold px-2">
+                    片段 {(chunkIndex % chunkFrames.length) + 1} / {chunkFrames.length}
+                  </span>
+                  <button
+                    onClick={() => setChunkIndex((prev) => (prev + 1) % chunkFrames.length)}
+                    className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800"
+                    title="下一張片段"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setIsAutoPlayChunks(!isAutoPlayChunks)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition ${
+                      isAutoPlayChunks
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {isAutoPlayChunks ? '輪播中 (1.6s)' : '已暫停'}
+                  </button>
+                </div>
+              )}
+
+              {/* Separate Unobtrusive Action Bar (Enlarge button placed OUTSIDE canvas) */}
+              <div className="flex items-center justify-center gap-2 pt-0.5">
                 <button
                   onClick={() => setIsEnlargedQr(true)}
-                  className="absolute bottom-2 right-2 px-2.5 py-1.5 rounded-xl bg-slate-900/90 text-white hover:bg-slate-800 text-[11px] font-semibold flex items-center gap-1 shadow-lg border border-slate-700 transition"
-                  title="放大全螢幕檢視"
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 shadow-md transition active:scale-[0.98]"
                 >
                   <Maximize2 className="w-3.5 h-3.5 text-sky-400" />
-                  <span>點擊放大</span>
+                  <span>放大全螢幕條碼</span>
                 </button>
               </div>
 
               {/* Status Note */}
               <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1.5">
-                {qrDensityMode === 'lite' ? (
+                {qrDensityMode === 'lite' && (
                   <span className="text-emerald-400 font-semibold flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>方塊模組超大超清晰，鏡頭距離 30~50 公分即可瞬間捕捉！</span>
                   </span>
-                ) : (
-                  <span className="text-sky-300">包含完整自訂欄位，若鏡頭對焦不易請點擊「放大」或切換「極速碼」。</span>
+                )}
+                {qrDensityMode === 'chunks' && (
+                  <span className="text-amber-300 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>大方塊自動輪播，手機對準取景框會自動連續收齊所有片段！</span>
+                  </span>
+                )}
+                {qrDensityMode === 'full' && (
+                  <span className="text-sky-300">包含完整自訂欄位，若對焦不易請點擊「放大條碼」或切換「分段輪播」。</span>
                 )}
               </div>
 
@@ -946,10 +1033,10 @@ export const SyncModal: React.FC<SyncModalProps> = ({
         )}
       </div>
 
-      {/* FULLSCREEN ENLARGED QR CODE MODAL (For instant locking from computer screen across the room) */}
+      {/* FULLSCREEN ENLARGED QR CODE MODAL (Responsive, will NEVER overflow on mobile screens) */}
       {isEnlargedQr && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-700 p-6 rounded-3xl max-w-md w-full flex flex-col items-center text-center space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-700 p-4 sm:p-6 rounded-3xl max-w-sm sm:max-w-md w-full flex flex-col items-center text-center space-y-3.5 shadow-2xl">
             <div className="flex items-center justify-between w-full pb-2 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Maximize2 className="w-4 h-4 text-sky-400" />
@@ -963,14 +1050,21 @@ export const SyncModal: React.FC<SyncModalProps> = ({
               </button>
             </div>
 
-            {/* Huge Canvas */}
-            <div className="p-4 bg-white rounded-3xl shadow-2xl border-4 border-slate-200">
-              <canvas ref={enlargedQrCanvasRef} className="w-[300px] h-[300px] sm:w-[350px] sm:h-[350px] block" />
+            {/* Responsive Canvas Frame */}
+            <div className="p-3 bg-white rounded-2xl sm:rounded-3xl shadow-2xl border-2 sm:border-4 border-slate-200 flex items-center justify-center max-w-[85vw]">
+              <canvas
+                ref={enlargedQrCanvasRef}
+                className="w-[min(260px,70vw)] h-[min(260px,70vw)] sm:w-[330px] sm:h-[330px] block aspect-square"
+              />
             </div>
 
             <div className="text-xs text-slate-300 space-y-1">
               <div className="font-semibold text-emerald-400">
-                {qrDensityMode === 'lite' ? '⚡ 核心極速碼：方塊超大，鏡頭秒速辨識' : '📦 完整詳細碼：請保持手機 35～45 公分距離對焦'}
+                {qrDensityMode === 'lite'
+                  ? '⚡ 核心極速碼：方塊超大，鏡頭秒速辨識'
+                  : qrDensityMode === 'chunks'
+                  ? `🎞️ 分段輪播中：第 ${(chunkIndex % chunkFrames.length) + 1} / ${chunkFrames.length} 片段`
+                  : '📦 完整詳細碼：請保持手機 35～45 公分距離對焦'}
               </div>
               <p className="text-[11px] text-slate-400">
                 請將手機 App 的「鏡頭掃碼」對準上方大圖，或直接點擊下方關閉。

@@ -40,6 +40,7 @@ interface NetworkCanvasProps {
   onRequestConnect: (sourceId: string, targetId: string) => void;
   onSeverRelationship: (relationshipId: string) => void;
   onSetAsCenter: (memberId: string) => void;
+  collapsedBranchMemberIds?: Set<string>;
 }
 
 interface PhysicsNode {
@@ -75,6 +76,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   onRequestConnect,
   onSeverRelationship,
   onSetAsCenter,
+  collapsedBranchMemberIds,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -193,12 +195,38 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     return new Set<string>(visibleMembers.map((m) => m.id));
   }, [visibleMembers]);
 
-  // Visible relationships (both endpoints must be visible)
+  // Visible relationships (both endpoints must be visible, respecting branch collapse)
   const visibleRelationships = useMemo(() => {
-    return relationships.filter(
-      (r) => visibleMemberIds.has(r.sourceId) && visibleMemberIds.has(r.targetId)
-    );
-  }, [relationships, visibleMemberIds]);
+    return relationships.filter((r) => {
+      if (!visibleMemberIds.has(r.sourceId) || !visibleMemberIds.has(r.targetId)) {
+        return false;
+      }
+      // If source member has external branches collapsed, ONLY show link if target is center!
+      if (collapsedBranchMemberIds?.has(r.sourceId) && r.targetId !== centerMemberId) {
+        return false;
+      }
+      // If target member has external branches collapsed, ONLY show link if source is center!
+      if (collapsedBranchMemberIds?.has(r.targetId) && r.sourceId !== centerMemberId) {
+        return false;
+      }
+      return true;
+    });
+  }, [relationships, visibleMemberIds, collapsedBranchMemberIds, centerMemberId]);
+
+  // Prune peripheral nodes that lost all connection paths to the center
+  const activeCanvasMembers = useMemo(() => {
+    if (!collapsedBranchMemberIds || collapsedBranchMemberIds.size === 0) {
+      return visibleMembers;
+    }
+    const connectedIds = new Set<string>();
+    connectedIds.add(centerMemberId);
+    visibleRelationships.forEach((r) => {
+      connectedIds.add(r.sourceId);
+      connectedIds.add(r.targetId);
+    });
+
+    return visibleMembers.filter((m) => connectedIds.has(m.id) || m.id === centerMemberId);
+  }, [visibleMembers, visibleRelationships, collapsedBranchMemberIds, centerMemberId]);
 
   // Synchronize visible members into physics nodes
   useEffect(() => {
@@ -209,7 +237,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     const width = container?.clientWidth || 800;
     const height = container?.clientHeight || 600;
 
-    visibleMembers.forEach((m, idx) => {
+    activeCanvasMembers.forEach((m, idx) => {
       const d = degreesMap.get(m.id) ?? 2;
       const isCenter = m.id === centerMemberId;
       const radius = isCenter ? 36 : Math.max(22, 32 - Math.min(3, d) * 3);
@@ -223,7 +251,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           degree: d,
         });
       } else {
-        const angle = (idx / Math.max(1, visibleMembers.length)) * Math.PI * 2;
+        const angle = (idx / Math.max(1, activeCanvasMembers.length)) * Math.PI * 2;
         const dist = isCenter ? 0 : 120 + Math.min(3, d) * 90 + (idx % 3) * 20;
         nextMap.set(m.id, {
           id: m.id,
@@ -710,6 +738,17 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           ctx.fill();
         }
 
+        // Branch collapsed amber badge
+        if (collapsedBranchMemberIds?.has(n.id) && !isCenter) {
+          ctx.beginPath();
+          ctx.arc(n.x + n.radius * 0.75, n.y - n.radius * 0.75, 6, 0, Math.PI * 2);
+          ctx.fillStyle = '#f59e0b';
+          ctx.fill();
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+
         // Name and category subtitle below node
         const labelY = n.y + n.radius + 14;
 
@@ -724,7 +763,8 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           ctx.font = '9px "Plus Jakarta Sans", sans-serif';
           ctx.fillStyle = '#94a3b8';
           const degreeTag = !isCenter && n.degree < 99 ? ` · ${n.degree}度` : '';
-          ctx.fillText(`${n.member.group}${degreeTag}`, n.x, labelY + 13);
+          const foldTag = collapsedBranchMemberIds?.has(n.id) ? ' [折疊外鏈]' : '';
+          ctx.fillText(`${n.member.group}${degreeTag}${foldTag}`, n.x, labelY + 13);
         }
       });
 
@@ -740,6 +780,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
       cancelAnimationFrame(animationFrameId);
     };
   }, [
+    activeCanvasMembers,
     visibleMembers,
     visibleRelationships,
     relationships,
@@ -753,6 +794,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     connectingSourceId,
     connectingTargetPos,
     activeEdgeId,
+    collapsedBranchMemberIds,
   ]);
 
   // Helper to compute distance between point (px, py) and segment (x1, y1)-(x2, y2)

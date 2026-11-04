@@ -1,6 +1,6 @@
 import React from 'react';
 import { Member, Relationship, LayerFilter } from '../types';
-import { Users, ChevronRight, Compass, Search, Filter, Layers, X } from 'lucide-react';
+import { Users, ChevronRight, Compass, Search, Filter, Layers, X, GitFork } from 'lucide-react';
 
 interface ContactsSidebarProps {
   members: Member[];
@@ -19,6 +19,8 @@ interface ContactsSidebarProps {
   degreesMap: Map<string, number>;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
+  collapsedBranchMemberIds?: Set<string>;
+  onToggleCollapseBranches?: (memberId: string) => void;
 }
 
 export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
@@ -38,6 +40,8 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
   degreesMap,
   isMobileOpen,
   onCloseMobile,
+  collapsedBranchMemberIds,
+  onToggleCollapseBranches,
 }) => {
   // Count connections per member
   const connectionCounts = members.reduce<Record<string, number>>((acc, m) => {
@@ -225,6 +229,7 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
             const isSelected = member.id === selectedMemberId;
             const connCount = connectionCounts[member.id] || 0;
             const degree = degreesMap.get(member.id);
+            const isBranchCollapsed = collapsedBranchMemberIds?.has(member.id);
 
             return (
               <div
@@ -260,6 +265,14 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
                           </span>
                         )
                       )}
+                      {isBranchCollapsed && (
+                        <span
+                          className="text-[9px] px-1 rounded bg-amber-500/20 text-amber-300 font-mono"
+                          title="已隱藏對外擴展鏈，畫布僅保留與中心的連線"
+                        >
+                          折疊外鏈
+                        </span>
+                      )}
                     </div>
                     <div className="text-[10px] text-slate-400 truncate flex items-center gap-1">
                       <span>{member.group}</span>
@@ -275,6 +288,26 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
+                  {!isCenter && onToggleCollapseBranches && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleCollapseBranches(member.id);
+                      }}
+                      title={
+                        isBranchCollapsed
+                          ? '目前已隱藏此人對外擴展鏈，畫布僅保留其與中心的連線（點擊展開全部）'
+                          : '隱藏此人對外所有擴展鏈（畫布僅保留其與中心點的連線）'
+                      }
+                      className={`p-1 rounded-lg transition ${
+                        isBranchCollapsed
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <GitFork className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
