@@ -1,6 +1,6 @@
 import React from 'react';
 import { Member, Relationship, LayerFilter } from '../types';
-import { Users, ChevronRight, Compass, Search, Filter, Layers, X, GitFork } from 'lucide-react';
+import { Users, ChevronRight, Compass, Search, Filter, Layers, X, GitFork, RotateCcw } from 'lucide-react';
 
 interface ContactsSidebarProps {
   members: Member[];
@@ -21,6 +21,7 @@ interface ContactsSidebarProps {
   onCloseMobile: () => void;
   collapsedBranchMemberIds?: Set<string>;
   onToggleCollapseBranches?: (memberId: string) => void;
+  onResetAllCollapsedBranches?: () => void;
 }
 
 export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
@@ -42,6 +43,7 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
   onCloseMobile,
   collapsedBranchMemberIds,
   onToggleCollapseBranches,
+  onResetAllCollapsedBranches,
 }) => {
   // Count connections per member
   const connectionCounts = members.reduce<Record<string, number>>((acc, m) => {
@@ -134,6 +136,24 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
               <span>關閉</span>
             </button>
           </div>
+
+          {/* Active Collapsed Branches Banner & Reset All Button */}
+          {collapsedBranchMemberIds && collapsedBranchMemberIds.size > 0 && onResetAllCollapsedBranches && (
+            <div className="flex items-center justify-between p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs animate-in fade-in duration-150">
+              <div className="flex items-center gap-1.5 font-medium">
+                <GitFork className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>已折疊 {collapsedBranchMemberIds.size} 人外鏈</span>
+              </div>
+              <button
+                onClick={onResetAllCollapsedBranches}
+                className="px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 hover:text-white font-medium text-[11px] transition border border-amber-500/30 flex items-center gap-1 active:scale-95 shadow-sm"
+                title="一鍵全部展開，恢復所有人際關係鏈"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>全部取消折疊</span>
+              </button>
+            </div>
+          )}
 
         {/* Mobile Search input */}
         <div className="relative lg:hidden">

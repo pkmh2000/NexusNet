@@ -18,6 +18,7 @@ import {
   ExternalLink,
   Share2,
   GitFork,
+  RotateCcw,
 } from 'lucide-react';
 
 interface MemberDetailDrawerProps {
@@ -25,6 +26,7 @@ interface MemberDetailDrawerProps {
   allMembers: Member[];
   relationships: Relationship[];
   isCenter: boolean;
+  centerMemberId?: string;
   onClose: () => void;
   onUpdateMember: (updatedMember: Member) => void;
   onDeleteMember: (memberId: string) => void;
@@ -35,7 +37,9 @@ interface MemberDetailDrawerProps {
   onEditRelationship?: (rel: Relationship) => void;
   onEditMemberModal: (member: Member) => void;
   isBranchCollapsed?: boolean;
+  collapsedBranchMemberIds?: Set<string>;
   onToggleCollapseBranches?: (memberId: string) => void;
+  onResetAllCollapsedBranches?: () => void;
 }
 
 export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
@@ -43,6 +47,7 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
   allMembers,
   relationships,
   isCenter,
+  centerMemberId,
   onClose,
   onUpdateMember,
   onDeleteMember,
@@ -53,7 +58,9 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
   onEditRelationship,
   onEditMemberModal,
   isBranchCollapsed = false,
+  collapsedBranchMemberIds,
   onToggleCollapseBranches,
+  onResetAllCollapsedBranches,
 }) => {
   const [isAddingField, setIsAddingField] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
@@ -186,19 +193,30 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
           {!isCenter && onToggleCollapseBranches && (
             <button
               onClick={() => onToggleCollapseBranches(member.id)}
-              className={`flex items-center gap-1.5 text-xs font-medium py-1.5 px-3 rounded-lg border transition ${
+              className={`flex items-center gap-1.5 text-xs font-medium py-1.5 px-3 rounded-lg border transition active:scale-95 ${
                 isBranchCollapsed
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
                   : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
               }`}
               title={
                 isBranchCollapsed
-                  ? '目前已隱藏此人對外擴展鏈，畫布僅保留其與中心的連線（點擊展開全部）'
-                  : '隱藏此人對外所有擴展鏈（畫布僅保留其與中心點的連線）'
+                  ? '目前已折疊此人對外擴展鏈，畫布僅保留其與中心的連線（點擊展開恢復）'
+                  : '折疊此人對外所有擴展鏈（畫布僅保留其與中心點的連線）'
               }
             >
               <GitFork className="w-3.5 h-3.5" />
-              <span>{isBranchCollapsed ? '已折疊對外鏈' : '隱藏對外鏈'}</span>
+              <span>{isBranchCollapsed ? '已折疊對外鏈' : '折疊對外鏈'}</span>
+            </button>
+          )}
+
+          {collapsedBranchMemberIds && collapsedBranchMemberIds.size > 0 && onResetAllCollapsedBranches && (
+            <button
+              onClick={onResetAllCollapsedBranches}
+              className="flex items-center gap-1 text-xs font-medium py-1.5 px-2.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition active:scale-95"
+              title="一鍵全部展開，恢復所有人際關係鏈"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>全部展開 ({collapsedBranchMemberIds.size})</span>
             </button>
           )}
         </div>
@@ -425,8 +443,14 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
                         {otherMember.name.charAt(0)}
                       </div>
                       <div className="truncate">
-                        <div className="text-xs font-semibold text-slate-200 hover:text-white truncate">
-                          {otherMember.name}
+                        <div className="text-xs font-semibold text-slate-200 hover:text-white truncate flex items-center gap-1.5">
+                          <span>{otherMember.name}</span>
+                          {((isBranchCollapsed && otherMember.id !== centerMemberId) ||
+                            (collapsedBranchMemberIds?.has(otherMember.id) && member.id !== centerMemberId)) && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono border border-amber-500/30">
+                              畫布已折疊
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-slate-400 flex items-center gap-1">
                           <span className="text-sky-400 font-medium">{rel.label}</span>

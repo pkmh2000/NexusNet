@@ -22,6 +22,7 @@ import {
   Check,
   Camera,
   Rocket,
+  GitFork,
 } from 'lucide-react';
 
 interface TopNavbarProps {
@@ -40,6 +41,8 @@ interface TopNavbarProps {
   selectedGroupFilter: string;
   onGroupFilterChange: (group: string) => void;
   allGroups: string[];
+  collapsedBranchCount?: number;
+  onResetAllCollapsedBranches?: () => void;
 }
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({
@@ -58,6 +61,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   selectedGroupFilter,
   onGroupFilterChange,
   allGroups,
+  collapsedBranchCount = 0,
+  onResetAllCollapsedBranches,
 }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSModal, setShowIOSModal] = useState(false);
@@ -424,6 +429,27 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                 <span>新增人物單元</span>
               </button>
             </div>
+
+            {/* Collapsed Branches Quick Reset in Mobile Menu */}
+            {collapsedBranchCount > 0 && onResetAllCollapsedBranches && (
+              <div className="py-1">
+                <button
+                  onClick={() => {
+                    setShowMobileActionSheet(false);
+                    onResetAllCollapsedBranches();
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 px-3.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold text-xs border border-amber-500/30 transition active:scale-[0.98]"
+                >
+                  <div className="flex items-center gap-2">
+                    <GitFork className="w-4 h-4 text-amber-400" />
+                    <span>已折疊 {collapsedBranchCount} 位成員對外鏈</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 text-[11px] font-bold">
+                    全部取消折疊
+                  </span>
+                </button>
+              </div>
+            )}
 
             {/* Search Input */}
             <div className="py-2">

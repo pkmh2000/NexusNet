@@ -48,6 +48,10 @@ export default function App() {
     });
   }, []);
 
+  const handleResetAllCollapsedBranches = useCallback(() => {
+    setCollapsedBranchMemberIds(new Set());
+  }, []);
+
   // Modals & Drawers
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
@@ -234,6 +238,14 @@ export default function App() {
 
   const handleSetAsCenter = useCallback((memberId: string) => {
     setCenterMemberId(memberId);
+    setCollapsedBranchMemberIds((prev) => {
+      if (prev.has(memberId)) {
+        const next = new Set(prev);
+        next.delete(memberId);
+        return next;
+      }
+      return prev;
+    });
     setNetwork((prev) => ({
       ...prev,
       members: prev.members.map((m) => ({
@@ -345,6 +357,7 @@ export default function App() {
       const center = data.members.find((m) => m.isCenter) || data.members[0];
       if (center) setCenterMemberId(center.id);
       setSelectedMemberId(null);
+      setCollapsedBranchMemberIds(new Set());
     } else {
       setNetwork((prev) => {
         const memberMap = new Map<string, Member>();
@@ -391,6 +404,7 @@ export default function App() {
     setMaxLayers('all');
     setSelectedGroupFilter('all');
     setSearchQuery('');
+    setCollapsedBranchMemberIds(new Set());
   }, []);
 
   const handleSelectMember = useCallback((memberId: string | null, openDrawer = false) => {
@@ -430,6 +444,8 @@ export default function App() {
         selectedGroupFilter={selectedGroupFilter}
         onGroupFilterChange={setSelectedGroupFilter}
         allGroups={allGroups}
+        collapsedBranchCount={collapsedBranchMemberIds.size}
+        onResetAllCollapsedBranches={handleResetAllCollapsedBranches}
       />
 
       {/* Main Workspace Frame */}
@@ -457,6 +473,7 @@ export default function App() {
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
           collapsedBranchMemberIds={collapsedBranchMemberIds}
           onToggleCollapseBranches={handleToggleCollapseMemberBranches}
+          onResetAllCollapsedBranches={handleResetAllCollapsedBranches}
         />
 
         {/* Center Canvas Area */}
@@ -484,6 +501,7 @@ export default function App() {
             onSeverRelationship={handleSeverRelationship}
             onSetAsCenter={handleSetAsCenter}
             collapsedBranchMemberIds={collapsedBranchMemberIds}
+            onResetAllCollapsedBranches={handleResetAllCollapsedBranches}
           />
 
           {/* Sidebar Trigger Floating Button (Tablet md..lg only; on mobile the bottom bar has dedicated 成員名單 tab) */}
@@ -504,6 +522,7 @@ export default function App() {
               allMembers={network.members}
               relationships={network.relationships}
               isCenter={selectedMember.id === centerMemberId}
+              centerMemberId={centerMemberId}
               onClose={() => setIsDetailDrawerOpen(false)}
               onUpdateMember={handleUpdateMember}
               onDeleteMember={handleDeleteMember}
@@ -521,7 +540,9 @@ export default function App() {
                 setIsMemberModalOpen(true);
               }}
               isBranchCollapsed={collapsedBranchMemberIds.has(selectedMember.id)}
+              collapsedBranchMemberIds={collapsedBranchMemberIds}
               onToggleCollapseBranches={handleToggleCollapseMemberBranches}
+              onResetAllCollapsedBranches={handleResetAllCollapsedBranches}
             />
           </div>
         )}

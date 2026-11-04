@@ -1,4 +1,4 @@
-export const APP_VERSION = 'v1.0.3-beta';
+export const APP_VERSION = 'v1.0.4-beta';
 export const APP_BUILD_DATE = '2026-11-04';
 
 export interface ChangelogItem {
@@ -9,6 +9,17 @@ export interface ChangelogItem {
 }
 
 export const APP_CHANGELOG: ChangelogItem[] = [
+  {
+    version: 'v1.0.4-beta',
+    date: '2026-11-04',
+    title: '重大優化：關係鏈折疊即時反應修復、全域一鍵全部取消折疊、多處狀態深度同步',
+    features: [
+      '修復「折疊對外分支鏈沒有即時反應」：重構圖論連通度（BFS Reachability）與畫布物理引擎更新觸發，折疊後外圍孤立枝葉即時收合消失，展開即刻彈出',
+      '新增「全部取消折疊 (一鍵重設)」機制：成員名單頂部、畫布懸浮條 HUD、成員詳情抽屜與手機功能選單均提供一鍵「全部取消折疊」，免去繁瑣逐個取消',
+      '全域狀態同步修復：畫布即時動態顯示「已收合 N 人」計數，成員詳情面板關係清單明確標示「畫布已折疊」，雙向狀態毫無誤差',
+      '切換中心或重設資料時自動清除歷史折疊狀態，避免邏輯殘留與畫布異常',
+    ],
+  },
   {
     version: 'v1.0.3-beta',
     date: '2026-11-04',

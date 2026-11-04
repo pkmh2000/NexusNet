@@ -15,6 +15,8 @@ import {
   Filter,
   Search,
   RefreshCw,
+  GitFork,
+  X,
 } from 'lucide-react';
 
 interface NetworkCanvasProps {
@@ -41,6 +43,7 @@ interface NetworkCanvasProps {
   onSeverRelationship: (relationshipId: string) => void;
   onSetAsCenter: (memberId: string) => void;
   collapsedBranchMemberIds?: Set<string>;
+  onResetAllCollapsedBranches?: () => void;
 }
 
 interface PhysicsNode {
@@ -77,6 +80,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   onSeverRelationship,
   onSetAsCenter,
   collapsedBranchMemberIds,
+  onResetAllCollapsedBranches,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -195,8 +199,8 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     return new Set<string>(visibleMembers.map((m) => m.id));
   }, [visibleMembers]);
 
-  // Visible relationships (both endpoints must be visible, respecting branch collapse)
-  const visibleRelationships = useMemo(() => {
+  // 1. Candidate relationships: exclude links incident to collapsed members unless connected to center
+  const candidateEdges = useMemo(() => {
     return relationships.filter((r) => {
       if (!visibleMemberIds.has(r.sourceId) || !visibleMemberIds.has(r.targetId)) {
         return false;
@@ -213,22 +217,61 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     });
   }, [relationships, visibleMemberIds, collapsedBranchMemberIds, centerMemberId]);
 
-  // Prune peripheral nodes that lost all connection paths to the center
+  // 2. Prune peripheral nodes that lost their path to the center due to branch collapse
   const activeCanvasMembers = useMemo(() => {
     if (!collapsedBranchMemberIds || collapsedBranchMemberIds.size === 0) {
       return visibleMembers;
     }
-    const connectedIds = new Set<string>();
-    connectedIds.add(centerMemberId);
-    visibleRelationships.forEach((r) => {
-      connectedIds.add(r.sourceId);
-      connectedIds.add(r.targetId);
+
+    // Build adjacency list using candidate edges
+    const adj = new Map<string, string[]>();
+    candidateEdges.forEach((r) => {
+      if (!adj.has(r.sourceId)) adj.set(r.sourceId, []);
+      if (!adj.has(r.targetId)) adj.set(r.targetId, []);
+      adj.get(r.sourceId)!.push(r.targetId);
+      adj.get(r.targetId)!.push(r.sourceId);
     });
 
-    return visibleMembers.filter((m) => connectedIds.has(m.id) || m.id === centerMemberId);
-  }, [visibleMembers, visibleRelationships, collapsedBranchMemberIds, centerMemberId]);
+    // BFS from centerMemberId to find all nodes with an unbroken path to center
+    const reachableFromCenter = new Set<string>();
+    reachableFromCenter.add(centerMemberId);
+    const queue: string[] = [centerMemberId];
 
-  // Synchronize visible members into physics nodes
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      const neighbors = adj.get(curr) || [];
+      for (const n of neighbors) {
+        if (!reachableFromCenter.has(n)) {
+          reachableFromCenter.add(n);
+          queue.push(n);
+        }
+      }
+    }
+
+    return visibleMembers.filter((m) => {
+      if (m.id === centerMemberId) return true;
+      const originalDist = degreesMap.get(m.id) ?? 99;
+      // If this member was connected to the center in the base graph, they must still be reachable
+      if (originalDist < 99) {
+        return reachableFromCenter.has(m.id);
+      }
+      // If they were completely isolated originally (no links at all), keep only if 'all' layers
+      return maxLayers === 'all';
+    });
+  }, [visibleMembers, candidateEdges, collapsedBranchMemberIds, centerMemberId, degreesMap, maxLayers]);
+
+  // 3. Final visible relationships: Both endpoints MUST be in activeCanvasMembers
+  const activeMemberIdSet = useMemo(() => {
+    return new Set<string>(activeCanvasMembers.map((m) => m.id));
+  }, [activeCanvasMembers]);
+
+  const visibleRelationships = useMemo(() => {
+    return candidateEdges.filter(
+      (r) => activeMemberIdSet.has(r.sourceId) && activeMemberIdSet.has(r.targetId)
+    );
+  }, [candidateEdges, activeMemberIdSet]);
+
+  // Synchronize active canvas members into physics nodes with instant reactivity
   useEffect(() => {
     const existing = nodesRef.current;
     const nextMap = new Map<string, PhysicsNode>();
@@ -268,12 +311,12 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
 
     nodesRef.current = nextMap;
     reheatSimulation(0.85);
-  }, [visibleMembers, degreesMap, centerMemberId, reheatSimulation]);
+  }, [activeCanvasMembers, degreesMap, centerMemberId, reheatSimulation]);
 
-  // Trigger reheat when switching view modes, layers, or modifying relationships
+  // Trigger reheat when switching view modes, layers, relationships, or branch collapse states
   useEffect(() => {
     reheatSimulation(1.0);
-  }, [viewMode, maxLayers, relationships, reheatSimulation]);
+  }, [viewMode, maxLayers, relationships, collapsedBranchMemberIds, reheatSimulation]);
 
   // Screen -> World coordinates
   const screenToWorld = useCallback(
@@ -1186,11 +1229,32 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
             )}
           </div>
 
+          {/* Branch Collapse Active Indicator & Reset Button */}
+          {collapsedBranchMemberIds && collapsedBranchMemberIds.size > 0 && onResetAllCollapsedBranches && (
+            <>
+              <div className="w-px h-4 bg-slate-800" />
+              <button
+                onClick={onResetAllCollapsedBranches}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-semibold transition active:scale-95 shadow-sm"
+                title="已折疊特定成員對外鏈，點擊立即全部取消折疊恢復完整圖譜"
+              >
+                <GitFork className="w-3 h-3 text-amber-400" />
+                <span>已折疊 {collapsedBranchMemberIds.size} 人外鏈</span>
+                <span className="text-[10px] bg-amber-500/30 px-1 rounded text-amber-200">全部取消</span>
+              </button>
+            </>
+          )}
+
           {/* Matches Count & Reset button */}
           <div className="flex items-center gap-1.5 pl-1 text-[11px]">
             <span className="text-slate-400 font-mono">
-              顯示 <span className="text-sky-300 font-bold">{visibleMembers.length}</span> / {members.length} 人
+              顯示 <span className="text-sky-300 font-bold">{activeCanvasMembers.length}</span> / {members.length} 人
             </span>
+            {collapsedBranchMemberIds && collapsedBranchMemberIds.size > 0 && visibleMembers.length > activeCanvasMembers.length && (
+              <span className="text-amber-400 font-mono text-[10px]">
+                (折疊收合 {visibleMembers.length - activeCanvasMembers.length} 人)
+              </span>
+            )}
 
             {isFilteringActive && (
               <button
@@ -1203,7 +1267,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
                 className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] transition"
               >
                 <RefreshCw className="w-2.5 h-2.5" />
-                <span>重設</span>
+                <span>重設篩選</span>
               </button>
             )}
           </div>
