@@ -18,7 +18,9 @@ import { MemberEditModal } from './components/MemberEditModal';
 import { RelationshipModal } from './components/RelationshipModal';
 import { DashboardStatsModal } from './components/DashboardStatsModal';
 import { SyncModal } from './components/SyncModal';
-import { Users, ArrowRightLeft } from 'lucide-react';
+import { Users, ArrowRightLeft, Rocket } from 'lucide-react';
+import { decompressNetworkData } from './utils/syncCodec';
+import { useAppUpdate } from './hooks/useAppUpdate';
 
 export default function App() {
   const [network, setNetwork] = useState<NetworkGraphData>(() => loadNetwork());
@@ -45,7 +47,9 @@ export default function App() {
   });
   const [isDashboardModalOpen, setIsDashboardModalOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncModalTab, setSyncModalTab] = useState<'scan' | 'qr' | 'code' | 'file' | 'version'>('scan');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const { updateAvailable, applyUpdate } = useAppUpdate();
 
   const [incomingSync, setIncomingSync] = useState<{
     data: NetworkGraphData;
@@ -61,15 +65,12 @@ export default function App() {
         try {
           const hashToken = hash.split('#sync=')[1];
           if (!hashToken) return;
-          const rawJson = decodeURIComponent(escape(atob(hashToken)));
-          const parsed = JSON.parse(rawJson);
-          if (parsed.members && Array.isArray(parsed.members) && parsed.relationships) {
-            setIncomingSync({
-              data: parsed,
-              sourceMembersCount: parsed.members.length,
-              sourceRelCount: parsed.relationships.length,
-            });
-          }
+          const parsed = decompressNetworkData(hashToken);
+          setIncomingSync({
+            data: parsed,
+            sourceMembersCount: parsed.members.length,
+            sourceRelCount: parsed.relationships.length,
+          });
         } catch (err) {
           console.warn('Failed to parse incoming sync from hash:', err);
         }
@@ -79,6 +80,11 @@ export default function App() {
     handleHashCheck();
     window.addEventListener('hashchange', handleHashCheck);
     return () => window.removeEventListener('hashchange', handleHashCheck);
+  }, []);
+
+  const handleOpenSync = useCallback((tab: 'scan' | 'qr' | 'code' | 'file' | 'version' = 'scan') => {
+    setSyncModalTab(tab);
+    setIsSyncModalOpen(true);
   }, []);
 
   // Auto-save to localStorage whenever network changes
@@ -404,7 +410,7 @@ export default function App() {
           setIsMemberModalOpen(true);
         }}
         onOpenDashboard={() => setIsDashboardModalOpen(true)}
-        onOpenSync={() => setIsSyncModalOpen(true)}
+        onOpenSync={handleOpenSync}
         onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -541,12 +547,27 @@ export default function App() {
         onSelectMember={setSelectedMemberId}
       />
 
+      {/* Floating PWA Update Notification Banner */}
+      {updateAvailable && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold text-xs rounded-2xl shadow-2xl flex items-center gap-3 border border-amber-300 animate-in slide-in-from-top duration-300">
+          <Rocket className="w-4 h-4 text-slate-950" />
+          <span>發現最新 Beta 更新版本！</span>
+          <button
+            onClick={applyUpdate}
+            className="px-3 py-1 bg-slate-950 hover:bg-slate-900 text-white font-semibold rounded-xl text-xs transition cursor-pointer"
+          >
+            立即套用升級
+          </button>
+        </div>
+      )}
+
       {/* Cross-Device Sync Modal (Mobile / Tablet / Desktop) */}
       <SyncModal
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
         network={network}
         onImportData={handleImportData}
+        initialTab={syncModalTab}
       />
 
       {/* Incoming Sync Confirmation Dialog (When opened via QR code or shared sync link) */}

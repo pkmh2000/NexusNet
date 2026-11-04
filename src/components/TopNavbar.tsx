@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ViewMode, CanvasMode, LayerFilter } from '../types';
 import { usePWAInstall } from '../hooks/usePWAInstall';
+import { APP_VERSION } from '../version';
 import {
   Share2,
   Activity,
@@ -19,6 +20,8 @@ import {
   MoreHorizontal,
   SlidersHorizontal,
   Check,
+  Camera,
+  Rocket,
 } from 'lucide-react';
 
 interface TopNavbarProps {
@@ -30,7 +33,7 @@ interface TopNavbarProps {
   onChangeMaxLayers: (layers: LayerFilter) => void;
   onOpenNewMemberModal: () => void;
   onOpenDashboard: () => void;
-  onOpenSync: () => void;
+  onOpenSync: (tab?: 'scan' | 'qr' | 'code' | 'file' | 'version') => void;
   onToggleMobileSidebar?: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -76,9 +79,13 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                 人際關係網
               </span>
             </span>
-            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase bg-gradient-to-r from-sky-500/20 to-indigo-500/20 text-sky-300 border border-sky-400/30">
-              Beta
-            </span>
+            <button
+              onClick={() => onOpenSync('version')}
+              title="點擊查看版本記錄與檢查更新"
+              className="px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase font-mono bg-gradient-to-r from-sky-500/20 to-indigo-500/20 text-sky-300 border border-sky-400/30 hover:border-sky-400/60 transition cursor-pointer"
+            >
+              {APP_VERSION}
+            </button>
           </div>
         </div>
 
@@ -207,14 +214,34 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
         {/* Desktop Zone 3: Actions & PWA Install (Hidden on mobile) */}
         <div className="hidden md:flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* In-App Camera Scan Button */}
+          <button
+            onClick={() => onOpenSync('scan')}
+            title="開啟 App 內建鏡頭掃描 QR Code 導入圖譜"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition shadow-sm"
+          >
+            <Camera className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden lg:inline">鏡頭掃碼</span>
+          </button>
+
           {/* Cross-Device Sync Button */}
           <button
-            onClick={onOpenSync}
-            title="手機、平板與桌機 跨裝置同步（QR Code / 同步碼）"
+            onClick={() => onOpenSync('qr')}
+            title="手機、平板與桌機 跨裝置同步（產生條碼 / 代碼）"
             className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-sky-950/70 hover:bg-sky-900/80 text-sky-300 text-xs font-semibold border border-sky-500/30 transition shadow-sm"
           >
             <ArrowRightLeft className="w-3.5 h-3.5 text-sky-400" />
             <span className="hidden sm:inline">跨裝置同步</span>
+          </button>
+
+          {/* Version & Update Button */}
+          <button
+            onClick={() => onOpenSync('version')}
+            title="檢查最新 Beta 更新版本"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-amber-300 text-xs font-medium border border-amber-500/30 transition"
+          >
+            <Rocket className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden xl:inline">檢查更新</span>
           </button>
 
           {/* Dashboard / Telemetry Button */}
@@ -358,6 +385,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-sky-400" />
                 <h3 className="font-bold text-sm text-white">NexusNet 功能選單</h3>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30 font-mono">
+                  {APP_VERSION}
+                </span>
               </div>
               <button
                 onClick={() => setShowMobileActionSheet(false)}
@@ -367,16 +397,30 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               </button>
             </div>
 
+            {/* In-App Camera Scan Quick CTA (User Requested: app 內開啟收 QR code 導入資料) */}
+            <div className="pt-3 pb-1">
+              <button
+                onClick={() => {
+                  setShowMobileActionSheet(false);
+                  onOpenSync('scan');
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition active:scale-[0.98]"
+              >
+                <Camera className="w-4 h-4" />
+                <span>📷 鏡頭掃碼導入圖譜 (免開瀏覽器)</span>
+              </button>
+            </div>
+
             {/* Primary Action: Add Member */}
-            <div className="pt-4 pb-3">
+            <div className="py-1">
               <button
                 onClick={() => {
                   setShowMobileActionSheet(false);
                   onOpenNewMemberModal();
                 }}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm shadow-lg shadow-sky-600/30 transition active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow-md shadow-sky-600/20 transition active:scale-[0.98]"
               >
-                <Plus className="w-5 h-5 stroke-[2.5]" />
+                <Plus className="w-4 h-4 stroke-[2.5]" />
                 <span>新增人物單元</span>
               </button>
             </div>
@@ -468,27 +512,25 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               </div>
             </div>
 
-            {/* Utility Grid: Sync, Dashboard, Install */}
+            {/* Utility Grid: Sync, Dashboard, Version Update */}
             <div className="pt-3 pb-1 border-t border-slate-800/80 space-y-2">
               <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
                 資料與管理功能
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {/* Sync */}
                 <button
                   onClick={() => {
                     setShowMobileActionSheet(false);
-                    onOpenSync();
+                    onOpenSync('qr');
                   }}
-                  className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-sky-500/30 text-left transition"
+                  className="flex flex-col items-center text-center p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-sky-500/30 transition"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-sky-950/80 flex items-center justify-center text-sky-400 shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-sky-950/80 flex items-center justify-center text-sky-400 mb-1">
                     <ArrowRightLeft className="w-4 h-4" />
                   </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-200">跨裝置同步</div>
-                    <div className="text-[10px] text-slate-400">QR Code / 網址</div>
-                  </div>
+                  <div className="text-[11px] font-semibold text-slate-200">跨裝置同步</div>
+                  <div className="text-[9px] text-slate-400">條碼 / 代碼</div>
                 </button>
 
                 {/* Dashboard */}
@@ -497,15 +539,28 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                     setShowMobileActionSheet(false);
                     onOpenDashboard();
                   }}
-                  className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-left transition"
+                  className="flex flex-col items-center text-center p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 transition"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-amber-950/60 flex items-center justify-center text-amber-400 shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-950/60 flex items-center justify-center text-indigo-400 mb-1">
                     <Activity className="w-4 h-4" />
                   </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-200">數據與備份</div>
-                    <div className="text-[10px] text-slate-400">JSON 匯入匯出</div>
+                  <div className="text-[11px] font-semibold text-slate-200">數據與備份</div>
+                  <div className="text-[9px] text-slate-400">JSON 匯出</div>
+                </button>
+
+                {/* Version Update */}
+                <button
+                  onClick={() => {
+                    setShowMobileActionSheet(false);
+                    onOpenSync('version');
+                  }}
+                  className="flex flex-col items-center text-center p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-amber-500/30 transition"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-950/60 flex items-center justify-center text-amber-400 mb-1">
+                    <Rocket className="w-4 h-4" />
                   </div>
+                  <div className="text-[11px] font-semibold text-slate-200">檢查更新</div>
+                  <div className="text-[9px] text-amber-400 font-mono">{APP_VERSION}</div>
                 </button>
               </div>
 

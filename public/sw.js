@@ -1,4 +1,5 @@
-const CACHE_NAME = 'nexusnet-cache-v3-beta';
+const CACHE_NAME = 'nexusnet-cache-v4-beta';
+const APP_VERSION = 'v1.0.0-beta';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -16,6 +17,15 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data && event.data.type === 'CHECK_VERSION') {
+    event.ports[0]?.postMessage({ version: APP_VERSION, cache: CACHE_NAME });
+  }
 });
 
 self.addEventListener('fetch', (event) => {

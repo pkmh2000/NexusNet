@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { NetworkGraphData } from '../types';
+import { InAppQRScanner } from './InAppQRScanner';
+import { compressNetworkData, decompressNetworkData } from '../utils/syncCodec';
+import { APP_VERSION, APP_BUILD_DATE, APP_CHANGELOG } from '../version';
+import { useAppUpdate } from '../hooks/useAppUpdate';
 import {
   X,
   Smartphone,
@@ -16,10 +20,12 @@ import {
   ExternalLink,
   Layers,
   Sparkles,
-  HelpCircle,
+  Camera,
   Share2,
   CheckCircle2,
   AlertCircle,
+  Rocket,
+  RotateCcw,
 } from 'lucide-react';
 
 interface SyncModalProps {
@@ -27,6 +33,7 @@ interface SyncModalProps {
   onClose: () => void;
   network: NetworkGraphData;
   onImportData: (data: NetworkGraphData, mode: 'replace' | 'merge') => void;
+  initialTab?: 'scan' | 'qr' | 'code' | 'file' | 'version';
 }
 
 export const SyncModal: React.FC<SyncModalProps> = ({
@@ -34,8 +41,9 @@ export const SyncModal: React.FC<SyncModalProps> = ({
   onClose,
   network,
   onImportData,
+  initialTab = 'scan',
 }) => {
-  const [activeTab, setActiveTab] = useState<'qr' | 'code' | 'file' | 'faq'>('qr');
+  const [activeTab, setActiveTab] = useState<'scan' | 'qr' | 'code' | 'file' | 'version'>(initialTab);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [inputSyncCode, setInputSyncCode] = useState('');
@@ -44,26 +52,37 @@ export const SyncModal: React.FC<SyncModalProps> = ({
   const [isError, setIsError] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Generate lightweight sync payload
-  const syncPayload = JSON.stringify({
-    version: 1,
-    exportedAt: Date.now(),
-    members: network.members,
-    relationships: network.relationships,
-  });
+  // App update manager
+  const {
+    currentVersion,
+    buildDate,
+    isChecking,
+    updateAvailable,
+    statusMessage: updateStatusMessage,
+    lastChecked,
+    checkForUpdates,
+    applyUpdate,
+    forceClearCache,
+  } = useAppUpdate();
 
-  // Base64 encode for string token
-  const base64SyncCode = btoa(unescape(encodeURIComponent(syncPayload)));
+  // Compressed Sync Payload using pako (reduces 15KB JSON down to ~1.2KB)
+  const compressionResult = React.useMemo(() => {
+    return compressNetworkData(network);
+  }, [network]);
+
+  const { compressedToken, rawJson, originalSize, compressedSize } = compressionResult;
 
   // Shareable link with hash
-  const shareableUrl = `${window.location.origin}${window.location.pathname}#sync=${base64SyncCode}`;
-  const appBaseUrl = `${window.location.origin}${window.location.pathname}`;
+  const shareableUrl = `${window.location.origin}${window.location.pathname}#sync=${compressedToken}`;
 
-  // Safe QR capacity limit (bytes): ~1,500 chars for reliable scanning on screens
-  const isDirectDataInQR = shareableUrl.length <= 1500;
-  const qrTargetContent = isDirectDataInQR ? shareableUrl : appBaseUrl;
+  // Keep active tab in sync when initialTab changes
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
-  // Auto-fill from URL hash if user opened with #sync=
+  // Auto-fill from URL hash if opened with #sync=
   useEffect(() => {
     if (isOpen && window.location.hash.includes('#sync=')) {
       const hashToken = window.location.hash.split('#sync=')[1];
@@ -74,36 +93,34 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     }
   }, [isOpen]);
 
-  // Generate QR Code with fallback to prevent blank canvas
+  // Generate QR Code when on 'qr' tab
   useEffect(() => {
-    if (!isOpen) {
-      setSyncStatusMessage(null);
-      return;
-    }
+    if (!isOpen || activeTab !== 'qr') return;
 
     if (qrCanvasRef.current) {
       try {
+        // Encode compressedToken into QR Code
         QRCode.toCanvas(
           qrCanvasRef.current,
-          qrTargetContent,
+          compressedToken,
           {
-            width: 220,
+            width: 230,
             margin: 2,
-            errorCorrectionLevel: 'M',
+            errorCorrectionLevel: 'L', // Low error correction maximizes capacity (up to 2,953 bytes)
             color: {
-              dark: '#0f172a',
+              dark: '#020617',
               light: '#ffffff',
             },
           },
           (err) => {
             if (err) {
-              console.error('QR code generation error, falling back to base URL:', err);
-              // Fallback to basic app URL if encoding failed
+              console.warn('QR code compression error fallback:', err);
+              // Fallback to URL if raw token hit limit
               if (qrCanvasRef.current) {
-                QRCode.toCanvas(qrCanvasRef.current, appBaseUrl, {
-                  width: 220,
+                QRCode.toCanvas(qrCanvasRef.current, shareableUrl.slice(0, 2000), {
+                  width: 230,
                   margin: 2,
-                  color: { dark: '#0f172a', light: '#ffffff' },
+                  errorCorrectionLevel: 'L',
                 });
               }
             }
@@ -113,18 +130,28 @@ export const SyncModal: React.FC<SyncModalProps> = ({
         console.error('QR code render exception:', err);
       }
     }
-  }, [isOpen, activeTab, qrTargetContent, appBaseUrl]);
+  }, [isOpen, activeTab, compressedToken, shareableUrl]);
 
   if (!isOpen) return null;
 
+  // In-App Scanner Success Handler
+  const handleInAppScanSuccess = (scannedData: NetworkGraphData) => {
+    onImportData(scannedData, importMode);
+    setIsError(false);
+    setSyncStatusMessage(
+      `鏡頭掃描成功！已直接在 App 內載入 ${scannedData.members.length} 位成員與 ${scannedData.relationships.length} 條關係線。`
+    );
+    setActiveTab('code'); // Switch back to code/summary tab
+  };
+
   const handleCopyCode = async () => {
     try {
-      await navigator.clipboard.writeText(base64SyncCode);
+      await navigator.clipboard.writeText(compressedToken);
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
     } catch (_) {
       const ta = document.createElement('textarea');
-      ta.value = base64SyncCode;
+      ta.value = compressedToken;
       document.body.appendChild(ta);
       ta.select();
       document.execCommand('copy');
@@ -155,8 +182,8 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'NexusNet 人際關係網同步連結',
-          text: `NexusNet 人際圖譜同步資料（含 ${network.members.length} 位成員、${network.relationships.length} 條關係線）`,
+          title: 'NexusNet 人際圖譜同步資料',
+          text: `NexusNet 人際圖譜同步（含 ${network.members.length} 位成員、${network.relationships.length} 條關係線）`,
           url: shareableUrl,
         });
       } catch (_) {}
@@ -173,30 +200,12 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     }
 
     try {
-      let rawJson = '';
-      const trimmed = inputSyncCode.trim();
-
-      if (trimmed.includes('#sync=')) {
-        const hashPart = trimmed.split('#sync=')[1];
-        rawJson = decodeURIComponent(escape(atob(hashPart)));
-      } else {
-        try {
-          rawJson = decodeURIComponent(escape(atob(trimmed)));
-        } catch (_) {
-          rawJson = trimmed;
-        }
-      }
-
-      const parsed = JSON.parse(rawJson);
-      if (!parsed.members || !Array.isArray(parsed.members) || !parsed.relationships) {
-        throw new Error('資料結構不符合 NexusNet 圖譜格式');
-      }
-
+      const parsed = decompressNetworkData(inputSyncCode);
       onImportData(parsed, importMode);
       setIsError(false);
       setSyncStatusMessage(
         importMode === 'replace'
-          ? `已成功覆蓋同步！共 ${parsed.members.length} 位成員、${parsed.relationships.length} 條關係連線。`
+          ? `已成功覆蓋同步！共載入 ${parsed.members.length} 位成員、${parsed.relationships.length} 條關係連線。`
           : `已成功智慧合併！目前已同步最新資料。`
       );
       setInputSyncCode('');
@@ -207,10 +216,10 @@ export const SyncModal: React.FC<SyncModalProps> = ({
   };
 
   const handleExportJson = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(syncPayload);
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(rawJson);
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `NexusNet_Graph_Backup_${new Date().toISOString().slice(0, 10)}.json`);
+    downloadAnchor.setAttribute('download', `NexusNet_Backup_${new Date().toISOString().slice(0, 10)}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -224,10 +233,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     reader.onload = (event) => {
       try {
         const content = event.target?.result as string;
-        const parsed = JSON.parse(content);
-        if (!parsed.members || !parsed.relationships) {
-          throw new Error('非有效的 NexusNet 檔案格式');
-        }
+        const parsed = decompressNetworkData(content);
         onImportData(parsed, importMode);
         setIsError(false);
         setSyncStatusMessage(`檔案匯入成功！共載入 ${parsed.members.length} 位成員。`);
@@ -240,11 +246,9 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     e.target.value = '';
   };
 
-  const payloadKb = Math.round((syncPayload.length / 1024) * 10) / 10;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-4 sm:px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
           <div className="flex items-center gap-3">
@@ -253,13 +257,13 @@ export const SyncModal: React.FC<SyncModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-2">
-                <span>跨裝置同步中心</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-normal">
-                  手機 · 平板 · 電腦
+                <span>跨裝置同步與更新中心</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-400/30 font-semibold font-mono">
+                  {currentVersion}
                 </span>
               </h2>
               <p className="text-[11px] sm:text-xs text-slate-400">
-                免登入帳號，透過 QR Code、一鍵同步連結或代碼在裝置間即刻同步
+                App 內建鏡頭直接掃碼導入 · 免開瀏覽器 · 智慧更新
               </p>
             </div>
           </div>
@@ -273,49 +277,69 @@ export const SyncModal: React.FC<SyncModalProps> = ({
 
         {/* Tab Navigation */}
         <div className="flex border-b border-slate-800 bg-slate-950/70 text-xs overflow-x-auto">
+          {/* Tab 1: In-App Scanner (User's primary request) */}
+          <button
+            onClick={() => setActiveTab('scan')}
+            className={`flex-1 min-w-[95px] py-2.5 sm:py-3 font-semibold flex items-center justify-center gap-1.5 border-b-2 transition whitespace-nowrap ${
+              activeTab === 'scan'
+                ? 'border-emerald-500 text-emerald-400 bg-emerald-500/10'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Camera className="w-3.5 h-3.5 text-emerald-400" />
+            <span>鏡頭掃碼導入</span>
+          </button>
+
+          {/* Tab 2: Show QR Code */}
           <button
             onClick={() => setActiveTab('qr')}
-            className={`flex-1 min-w-[90px] py-2.5 sm:py-3 font-medium flex items-center justify-center gap-1.5 border-b-2 transition whitespace-nowrap ${
+            className={`flex-1 min-w-[95px] py-2.5 sm:py-3 font-medium flex items-center justify-center gap-1.5 border-b-2 transition whitespace-nowrap ${
               activeTab === 'qr'
                 ? 'border-sky-500 text-sky-400 bg-sky-500/5'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <QrCode className="w-3.5 h-3.5" />
-            <span>QR Code 掃描</span>
+            <span>產生同步條碼</span>
           </button>
+
+          {/* Tab 3: Code / Link */}
           <button
             onClick={() => setActiveTab('code')}
-            className={`flex-1 min-w-[90px] py-2.5 sm:py-3 font-medium flex items-center justify-center gap-1.5 border-b-2 transition whitespace-nowrap ${
+            className={`flex-1 min-w-[95px] py-2.5 sm:py-3 font-medium flex items-center justify-center gap-1.5 border-b-2 transition whitespace-nowrap ${
               activeTab === 'code'
                 ? 'border-sky-500 text-sky-400 bg-sky-500/5'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <Copy className="w-3.5 h-3.5" />
-            <span>同步代碼 / 連結</span>
+            <span>代碼 / 連結</span>
           </button>
+
+          {/* Tab 4: File */}
           <button
             onClick={() => setActiveTab('file')}
-            className={`flex-1 min-w-[90px] py-2.5 sm:py-3 font-medium flex items-center justify-center gap-1.5 border-b-2 transition whitespace-nowrap ${
+            className={`flex-1 min-w-[95px] py-2.5 sm:py-3 font-medium flex items-center justify-center gap-1.5 border-b-2 transition whitespace-nowrap ${
               activeTab === 'file'
                 ? 'border-sky-500 text-sky-400 bg-sky-500/5'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <Download className="w-3.5 h-3.5" />
-            <span>備份檔 匯入/匯出</span>
+            <span>備份檔 匯入/出</span>
           </button>
+
+          {/* Tab 5: Version & Update */}
           <button
-            onClick={() => setActiveTab('faq')}
-            className={`flex-1 min-w-[90px] py-2.5 sm:py-3 font-medium flex items-center justify-center gap-1.5 border-b-2 transition whitespace-nowrap ${
-              activeTab === 'faq'
-                ? 'border-sky-500 text-sky-400 bg-sky-500/5'
+            onClick={() => setActiveTab('version')}
+            className={`flex-1 min-w-[95px] py-2.5 sm:py-3 font-medium flex items-center justify-center gap-1.5 border-b-2 transition whitespace-nowrap ${
+              activeTab === 'version'
+                ? 'border-amber-500 text-amber-400 bg-amber-500/5'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-            <span>差異與掃描說明</span>
+            <Rocket className="w-3.5 h-3.5 text-amber-400" />
+            <span>版本更新</span>
           </button>
         </div>
 
@@ -324,7 +348,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
           {/* Status Message Notification */}
           {syncStatusMessage && (
             <div
-              className={`p-3 rounded-xl text-xs flex items-center justify-between border ${
+              className={`p-3 rounded-xl text-xs flex items-center justify-between border animate-in fade-in duration-150 ${
                 isError
                   ? 'bg-red-500/10 border-red-500/30 text-red-300'
                   : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
@@ -340,40 +364,85 @@ export const SyncModal: React.FC<SyncModalProps> = ({
             </div>
           )}
 
-          {/* TAB 1: QR Code Sync */}
+          {/* TAB 1: In-App Camera QR Scanner */}
+          {activeTab === 'scan' && (
+            <div className="space-y-3">
+              <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-3 text-xs flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <div className="font-bold text-emerald-300">App 內建鏡頭掃描導入</div>
+                  <div className="text-[11px] text-slate-300">
+                    拿起手機，直接對準電腦螢幕或其他裝置顯示的 NexusNet 同步條碼，掃描後將<strong>直接在 App 內自動套用</strong>，絕不跳轉至外部瀏覽器！
+                  </div>
+                </div>
+              </div>
+
+              {/* Mode Selection */}
+              <div className="flex items-center justify-between p-2.5 bg-slate-950/60 rounded-xl border border-slate-800 text-xs">
+                <span className="text-slate-400 font-medium">導入模式：</span>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
+                    <input
+                      type="radio"
+                      name="scannerMode"
+                      value="replace"
+                      checked={importMode === 'replace'}
+                      onChange={() => setImportMode('replace')}
+                      className="accent-sky-500"
+                    />
+                    <span>完全覆蓋 (推薦)</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
+                    <input
+                      type="radio"
+                      name="scannerMode"
+                      value="merge"
+                      checked={importMode === 'merge'}
+                      onChange={() => setImportMode('merge')}
+                      className="accent-sky-500"
+                    />
+                    <span>智慧合併</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Live Camera Scanner */}
+              <InAppQRScanner
+                onScanSuccess={handleInAppScanSuccess}
+                onClose={() => setActiveTab('code')}
+              />
+            </div>
+          )}
+
+          {/* TAB 2: Show Compressed QR Code */}
           {activeTab === 'qr' && (
             <div className="flex flex-col items-center text-center space-y-3.5">
               {/* QR Code Canvas Frame */}
               <div className="relative p-3 bg-white rounded-2xl shadow-xl border border-slate-300 inline-block">
-                <canvas ref={qrCanvasRef} className="w-[190px] h-[190px] sm:w-[210px] sm:h-[210px] block" />
+                <canvas ref={qrCanvasRef} className="w-[200px] h-[200px] sm:w-[220px] sm:h-[220px] block" />
               </div>
 
-              {/* Mode Indicator Badge */}
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-300 border border-sky-500/30">
-                <Smartphone className="w-3.5 h-3.5 text-sky-400" />
-                <span>手機相機直接對準螢幕掃描</span>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>極限壓縮條碼 (含全部 {network.members.length} 位成員與 {network.relationships.length} 條關係)</span>
               </div>
 
-              {/* Context Explanation */}
-              {isDirectDataInQR ? (
-                <p className="text-xs text-slate-300 max-w-md leading-relaxed">
-                  拿起手機或 iPad 相機對準上方 QR Code，掃描後將直接開啟並自動套用目前人際圖譜。
-                </p>
-              ) : (
-                <div className="max-w-md bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-left space-y-1.5">
-                  <div className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>掃描說明（大資料量圖譜）</span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    目前圖譜包含 <strong className="text-white">{network.members.length} 位成員</strong> 與 <strong className="text-white">{network.relationships.length} 條關係線</strong>（資料約 {payloadKb} KB）。
-                    手機相機掃描上方 QR Code 會直接在手機瀏覽器打開 NexusNet！
-                  </p>
-                  <p className="text-[11px] text-sky-300 font-medium leading-relaxed">
-                    👉 打開後，點擊下方「<strong>複製一鍵同步連結</strong>」發送至手機（Line / AirDrop），點擊連結即會自動彈出同步視窗！
-                  </p>
+              <div className="max-w-md bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-left space-y-1.5 text-xs">
+                <div className="font-semibold text-sky-300 flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4 text-sky-400" />
+                  <span>如何在手機 App 內接收？</span>
                 </div>
-              )}
+                <ol className="list-decimal list-inside text-[11px] text-slate-300 space-y-1">
+                  <li>在手機打開 NexusNet App。</li>
+                  <li>點擊底部「功能選單」➔「跨裝置同步」。</li>
+                  <li>切換至第一個頁籤「<strong>鏡頭掃碼導入</strong>」。</li>
+                  <li>對準上方 QR Code，即可在 App 內瞬間完成同步導入！</li>
+                </ol>
+                <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-800/80 flex justify-between">
+                  <span>原始 JSON: {Math.round(originalSize / 1024 * 10) / 10} KB</span>
+                  <span className="text-emerald-400 font-bold">zlib 壓縮後: {Math.round(compressedSize / 1024 * 10) / 10} KB (節省 {Math.round((1 - compressedSize / originalSize) * 100)}%)</span>
+                </div>
+              </div>
 
               {/* Quick Actions */}
               <div className="flex flex-wrap items-center justify-center gap-2 pt-1 w-full max-w-md">
@@ -390,28 +459,18 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                   className="flex-1 min-w-[140px] px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium border border-slate-700 flex items-center justify-center gap-1.5 transition"
                 >
                   {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-sky-400" />}
-                  <span>{copiedCode ? '已複製代碼！' : '複製同步代碼'}</span>
+                  <span>{copiedCode ? '已複製代碼！' : '複製壓縮代碼'}</span>
                 </button>
-
-                {typeof navigator.share === 'function' && (
-                  <button
-                    onClick={handleNativeShare}
-                    className="w-full px-3.5 py-2 bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span>AirDrop / 社群分享同步連結</span>
-                  </button>
-                )}
               </div>
             </div>
           )}
 
-          {/* TAB 2: Sync Code / Direct Import */}
+          {/* TAB 3: Code / Link */}
           {activeTab === 'code' && (
             <div className="space-y-4">
               <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-300">本機人際圖譜同步代碼 (Base64)</span>
+                  <span className="text-xs font-semibold text-slate-300">本機高壓縮同步代碼 (NNZ: zlib)</span>
                   <button
                     onClick={handleCopyCode}
                     className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-sky-600/20 text-sky-300 hover:bg-sky-600/30 transition"
@@ -421,32 +480,32 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                   </button>
                 </div>
                 <div className="p-2.5 bg-slate-900 rounded-lg text-[11px] font-mono text-slate-400 break-all max-h-24 overflow-y-auto border border-slate-800/80">
-                  {base64SyncCode}
+                  {compressedToken}
                 </div>
               </div>
 
               {/* Paste Sync Code to Import */}
               <div className="space-y-2">
                 <label className="block text-xs font-semibold text-slate-300">
-                  從其他裝置貼上同步代碼或一鍵同步連結
+                  貼上從其他裝置複製的同步代碼或網址
                 </label>
                 <textarea
                   rows={3}
                   value={inputSyncCode}
                   onChange={(e) => setInputSyncCode(e.target.value)}
-                  placeholder="在此貼上從手機、平板或電腦複製的同步代碼，或帶有 #sync= 的一鍵連結..."
+                  placeholder="在此貼上代碼 (以 NNZ: 開頭或舊版 Base64)，或一鍵同步網址..."
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 font-mono focus:outline-none focus:border-sky-500 resize-none"
                 />
               </div>
 
               {/* Sync Mode Choice */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-950/40 rounded-xl border border-slate-800 text-xs gap-2">
-                <span className="text-slate-400 font-medium">同步方式：</span>
+                <span className="text-slate-400 font-medium">導入模式：</span>
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
                     <input
                       type="radio"
-                      name="syncMode"
+                      name="codeSyncMode"
                       value="replace"
                       checked={importMode === 'replace'}
                       onChange={() => setImportMode('replace')}
@@ -457,7 +516,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                   <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
                     <input
                       type="radio"
-                      name="syncMode"
+                      name="codeSyncMode"
                       value="merge"
                       checked={importMode === 'merge'}
                       onChange={() => setImportMode('merge')}
@@ -473,12 +532,12 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                 className="w-full py-2.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                <span>立即解析並套用同步</span>
+                <span>立即解析並導入圖譜</span>
               </button>
             </div>
           )}
 
-          {/* TAB 3: File Backup / Restore */}
+          {/* TAB 4: File Backup / Restore */}
           {activeTab === 'file' && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -497,7 +556,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                     className="w-full py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>下載 JSON 備份 ({payloadKb} KB)</span>
+                    <span>下載 JSON 備份 ({Math.round(originalSize / 1024 * 10) / 10} KB)</span>
                   </button>
                 </div>
 
@@ -534,75 +593,101 @@ export const SyncModal: React.FC<SyncModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: FAQ & Differences (Answers to user questions) */}
-          {activeTab === 'faq' && (
-            <div className="space-y-3.5 text-xs">
-              {/* Question 1: Receiving End */}
-              <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1.5">
-                <div className="font-bold text-sky-400 flex items-center gap-1.5 text-xs">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Q1：接收端 是在 App 內開啟 或用一般手機相機掃描即可？</span>
-                </div>
-                <p className="text-slate-300 leading-relaxed pl-5">
-                  <strong>只要用一般手機內建相機掃描即可！</strong> 不需要事先下載任何專屬 App 或特定掃碼工具：
-                </p>
-                <ul className="list-disc list-inside text-slate-400 space-y-1 pl-5 text-[11px]">
-                  <li><strong>iPhone / iPad</strong>：打開內建「相機」對準螢幕，上方會彈出 Safari 黃色通知，點擊即可開啟。</li>
-                  <li><strong>Android</strong>：打開相機或 Google 智慧鏡頭掃描，點擊在 Chrome 開啟。</li>
-                  <li>當手機打開帶有同步資料的網址時，NexusNet 會<strong>自動彈出同步詢問視窗</strong>，一鍵點擊「套用」即完成同步！</li>
-                </ul>
-              </div>
-
-              {/* Question 2: Differences between QR code, Link, Code */}
-              <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
-                <div className="font-bold text-sky-400 flex items-center gap-1.5 text-xs">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Q2：QR Code、一鍵同步連結、同步代碼 有什麼差別？</span>
+          {/* TAB 5: Version & Update (User request: app 是不是沒有更新機制? 現在起 添加 beta version!) */}
+          {activeTab === 'version' && (
+            <div className="space-y-4 text-xs">
+              {/* Current Version Card */}
+              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-base text-white">NexusNet 人際關係網</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30 font-mono">
+                      {currentVersion}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    建置日期：{buildDate} · PWA 離線安裝版
+                  </div>
+                  {lastChecked && (
+                    <div className="text-[10px] text-slate-500">
+                      上次檢查：{lastChecked.toLocaleTimeString()}
+                    </div>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
-                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                    <div className="font-semibold text-sky-300 mb-1 flex items-center gap-1">
-                      <QrCode className="w-3.5 h-3.5" />
-                      <span>QR Code 掃描</span>
-                    </div>
-                    <p className="text-slate-400 leading-normal">
-                      <strong>最適合：桌機 ➔ 手機</strong>。電腦螢幕顯示條碼，手機相機一秒開啟網站，無需手動打字。受限於黑白圖片容量（約 2KB）。
-                    </p>
-                  </div>
-
-                  <div className="p-2.5 rounded-lg bg-slate-900 border border-sky-500/30">
-                    <div className="font-semibold text-emerald-300 mb-1 flex items-center gap-1">
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>一鍵同步連結 (最推薦)</span>
-                    </div>
-                    <p className="text-slate-400 leading-normal">
-                      <strong>最推薦：跨裝置通訊</strong>。複製網址發到 Line 或 AirDrop，接收端手機<strong>點擊網址打開立即自動套用</strong>。
-                    </p>
-                  </div>
-
-                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                    <div className="font-semibold text-amber-300 mb-1 flex items-center gap-1">
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>純文字同步代碼</span>
-                    </div>
-                    <p className="text-slate-400 leading-normal">
-                      <strong>最穩定：無長度限制</strong>。將 Base64 字串貼到任何筆記本或聊天軟體，在接收端點擊「解析套用」100% 保真。
-                    </p>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={checkForUpdates}
+                    disabled={isChecking}
+                    className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-sky-600/20 transition flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
+                    <span>{isChecking ? '正在檢查...' : '檢查最新版本'}</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Question 3: Blank QR code issue explanation */}
-              <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1.5">
-                <div className="font-bold text-sky-400 flex items-center gap-1.5 text-xs">
-                  <AlertCircle className="w-4 h-4 text-amber-400" />
-                  <span>Q3：為什麼先前會出現「空白 QR Code」？</span>
+              {/* Update Status Banner */}
+              {updateStatusMessage && (
+                <div
+                  className={`p-3 rounded-xl flex items-center justify-between border ${
+                    updateAvailable
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                      : 'bg-slate-950 border-slate-800 text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Rocket className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>{updateStatusMessage}</span>
+                  </div>
+                  {updateAvailable && (
+                    <button
+                      onClick={applyUpdate}
+                      className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition shrink-0 ml-2"
+                    >
+                      立即套用更新
+                    </button>
+                  )}
                 </div>
-                <p className="text-slate-300 leading-relaxed pl-5 text-[11px]">
-                  二維條碼（QR Code）在物理規格上最多只能容納約 2,000 ~ 2,900 字元。先前因完整人脈圖譜（數十位成員、關係線、電話、筆記）高達 15,000 字元，硬塞導致底層條碼產生器溢位報錯而空白。
-                  現已升級<strong>智慧安全容量偵測</strong>：保證 QR Code 永遠清晰完整可掃描，並提供一鍵同步連結作為最順暢的管道！
-                </p>
+              )}
+
+              {/* Force Cache Reset (Troubleshooting) */}
+              <div className="p-3 bg-slate-950/40 border border-slate-800/80 rounded-xl flex items-center justify-between text-slate-400 text-[11px]">
+                <div>
+                  <div className="font-medium text-slate-300">遇到畫面未更新或快取殘留？</div>
+                  <div>一鍵強制清除瀏覽器本機 Service Worker 快取並重整。</div>
+                </div>
+                <button
+                  onClick={forceClearCache}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition shrink-0 ml-2 flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>強制刷新</span>
+                </button>
+              </div>
+
+              {/* Changelog */}
+              <div className="space-y-2">
+                <div className="font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Beta 版本更新記錄</span>
+                </div>
+                <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+                  {APP_CHANGELOG.map((item) => (
+                    <div key={item.version} className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sky-400 font-mono">{item.version}</span>
+                        <span className="text-[10px] text-slate-500">{item.date}</span>
+                      </div>
+                      <div className="text-[11px] font-medium text-slate-200">{item.title}</div>
+                      <ul className="list-disc list-inside text-[10px] text-slate-400 space-y-0.5 pl-1">
+                        {item.features.map((feat, idx) => (
+                          <li key={idx}>{feat}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -611,7 +696,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
         {/* Footer */}
         <div className="px-4 sm:px-5 py-3 border-t border-slate-800 flex items-center justify-between bg-slate-900/80 text-xs">
           <span className="text-slate-400 text-[11px]">
-            目前圖譜：{network.members.length} 成員 · {network.relationships.length} 關係 · {payloadKb} KB
+            目前圖譜：{network.members.length} 成員 · {network.relationships.length} 關係 · {currentVersion}
           </span>
           <button
             onClick={onClose}

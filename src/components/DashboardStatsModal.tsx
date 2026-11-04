@@ -19,6 +19,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { APP_VERSION } from '../version';
 
 interface DashboardStatsModalProps {
   isOpen: boolean;
@@ -113,8 +114,8 @@ export const DashboardStatsModal: React.FC<DashboardStatsModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-slate-100 text-sm">人際資源與網絡監控儀表板</h3>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-500/15 text-sky-300 border border-sky-400/30 uppercase">
-                  Beta Version
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-400/30 uppercase">
+                  {APP_VERSION}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">即時監控社群脈絡、生日提醒、GitHub Pages 部署與備份</p>
