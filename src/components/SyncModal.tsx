@@ -58,6 +58,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
   // App update manager
   const {
     currentVersion,
+    remoteVersion,
     buildDate,
     isChecking,
     updateAvailable,
@@ -65,7 +66,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     lastChecked,
     checkForUpdates,
     applyUpdate,
-    forceClearCache,
+    forceBypassCacheReload,
   } = useAppUpdate();
 
   // Full compressed payload
@@ -615,46 +616,62 @@ export const SyncModal: React.FC<SyncModalProps> = ({
             </div>
           )}
 
-          {/* TAB 5: Version & Update */}
+          {/* TAB 5: Version & Update (Real Remote version.json & Cache Bypass) */}
           {activeTab === 'version' && (
             <div className="space-y-4 text-xs">
-              {/* Current Version Card */}
-              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-base text-white">NexusNet 人際關係網</span>
-                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30 font-mono">
-                      {currentVersion}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    建置日期：{buildDate} · PWA 離線安裝版
-                  </div>
-                  {lastChecked && (
-                    <div className="text-[10px] text-slate-500">
-                      上次檢查：{lastChecked.toLocaleTimeString()}
+              {/* Version Comparison Card */}
+              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-base text-white">NexusNet 人際關係網</span>
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30 font-mono">
+                        {currentVersion}
+                      </span>
                     </div>
-                  )}
-                </div>
+                    <div className="text-[11px] text-slate-400">
+                      建置日期：{buildDate} · PWA 離線安裝版
+                    </div>
+                  </div>
 
-                <div className="flex items-center gap-2">
                   <button
                     onClick={checkForUpdates}
                     disabled={isChecking}
-                    className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-sky-600/20 transition flex items-center gap-1.5"
+                    className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-sky-600/20 transition flex items-center justify-center gap-1.5 shrink-0"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
-                    <span>{isChecking ? '正在檢查...' : '檢查最新版本'}</span>
+                    <span>{isChecking ? '正在連線比對...' : '檢查伺服器更新'}</span>
                   </button>
                 </div>
+
+                {/* Real-time Version Comparison Table */}
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-0.5">
+                    <div className="text-slate-400">本機裝置運行版本</div>
+                    <div className="font-bold text-sky-400 font-mono text-xs">{currentVersion}</div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-0.5">
+                    <div className="text-slate-400">伺服器端最新發布</div>
+                    <div className="font-bold text-emerald-400 font-mono text-xs">
+                      {remoteVersion || '正在查詢伺服器...'}
+                    </div>
+                  </div>
+                </div>
+
+                {lastChecked && (
+                  <div className="text-[10px] text-slate-500">
+                    上次檢查時間：{lastChecked.toLocaleTimeString()}
+                  </div>
+                )}
               </div>
 
               {/* Update Status Banner */}
               {updateStatusMessage && (
                 <div
-                  className={`p-3 rounded-xl flex items-center justify-between border ${
+                  className={`p-3.5 rounded-xl flex items-center justify-between border ${
                     updateAvailable
-                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
                       : 'bg-slate-950 border-slate-800 text-slate-300'
                   }`}
                 >
@@ -665,7 +682,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                   {updateAvailable && (
                     <button
                       onClick={applyUpdate}
-                      className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition shrink-0 ml-2"
+                      className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition shrink-0 ml-2 shadow-md shadow-amber-500/20"
                     >
                       立即套用更新
                     </button>
@@ -673,19 +690,47 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                 </div>
               )}
 
-              {/* Force Cache Reset */}
-              <div className="p-3 bg-slate-950/40 border border-slate-800/80 rounded-xl flex items-center justify-between text-slate-400 text-[11px]">
-                <div>
-                  <div className="font-medium text-slate-300">遇到畫面未更新或快取殘留？</div>
-                  <div>一鍵強制清除瀏覽器本機 Service Worker 快取並重整。</div>
+              {/* Force Cache Bypass & Reset (For stubborn PWA / iOS cache) */}
+              <div className="p-3.5 bg-slate-950/60 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-slate-300">
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-amber-300 flex items-center gap-1.5">
+                    <RotateCcw className="w-4 h-4 text-amber-400" />
+                    <span>手機 App 卡在舊版？強制繞過快取重整</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    一鍵清空瀏覽器快取儲存空間（CacheStorage），強制重新向伺服器拉取最新代碼。
+                  </div>
                 </div>
                 <button
-                  onClick={forceClearCache}
-                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition shrink-0 ml-2 flex items-center gap-1"
+                  onClick={forceBypassCacheReload}
+                  className="px-3 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/40 rounded-xl font-bold transition shrink-0 flex items-center justify-center gap-1.5"
                 >
-                  <RotateCcw className="w-3 h-3" />
+                  <RotateCcw className="w-3.5 h-3.5" />
                   <span>強制刷新</span>
                 </button>
+              </div>
+
+              {/* GitHub Pages Deployment Note */}
+              <div className="p-3.5 bg-slate-950/40 border border-slate-800 rounded-2xl space-y-2 text-slate-400 text-[11px]">
+                <div className="font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Info className="w-4 h-4 text-sky-400" />
+                  <span>GitHub Pages 部署進版說明</span>
+                </div>
+                <p className="leading-relaxed">
+                  若您是將本專案部署至自己的 GitHub Pages 網址，當程式碼更新後，必須將變更推送至 GitHub 倉庫的 <code className="text-sky-300">main</code> 分支，GitHub Actions 自動編譯完成後（約需 1～2 分鐘），您的線上網址才會同步進版！
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText('git add . && git commit -m "Update NexusNet to v1.0.1-beta" && git push');
+                      alert('已複製 Git 部署指令！請在您的本機專案目錄執行終端機指令。');
+                    }}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-mono font-medium flex items-center gap-1.5 transition"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-sky-400" />
+                    <span>複製 Git 部署推播指令</span>
+                  </button>
+                </div>
               </div>
 
               {/* Changelog */}

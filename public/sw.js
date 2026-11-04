@@ -1,5 +1,5 @@
-const CACHE_NAME = 'nexusnet-cache-v4-beta';
-const APP_VERSION = 'v1.0.0-beta';
+const CACHE_NAME = 'nexusnet-cache-v5-beta';
+const APP_VERSION = 'v1.0.1-beta';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -23,8 +23,8 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
-  if (event.data && event.data.type === 'CHECK_VERSION') {
-    event.ports[0]?.postMessage({ version: APP_VERSION, cache: CACHE_NAME });
+  if (event.data && event.data.type === 'CLEAR_ALL_CACHES') {
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
   }
 });
 
@@ -33,13 +33,17 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // Never intercept or cache dev server resources, HMR, or source modules
+  // Never intercept version checks, live tokens, dev server resources, or cache-busting queries
   if (
+    url.pathname.includes('version.json') ||
     url.pathname.includes('/@vite') ||
     url.pathname.includes('/@fs') ||
     url.pathname.endsWith('.tsx') ||
     url.pathname.endsWith('.ts') ||
     url.searchParams.has('t') ||
+    url.searchParams.has('_t') ||
+    url.searchParams.has('v') ||
+    url.searchParams.has('update') ||
     url.hostname.includes('run.app') ||
     url.hostname === 'localhost' ||
     url.hostname === '127.0.0.1'

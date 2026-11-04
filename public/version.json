@@ -1,0 +1,11 @@
+{
+  "version": "v1.0.1-beta",
+  "buildTime": 1793840000000,
+  "buildDate": "2026-11-04",
+  "name": "NexusNet 人際關係網",
+  "changelog": [
+    "全面升級真實遠端 version.json 版本檢測機制",
+    "修復手機 PWA 快取殘留無效問題，新增一鍵強制繞過快取重載",
+    "進版至 v1.0.1-beta，確保伺服器與本機版本清晰可對比"
+  ]
+}
