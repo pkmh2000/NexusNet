@@ -18,7 +18,7 @@ import { MemberEditModal } from './components/MemberEditModal';
 import { RelationshipModal } from './components/RelationshipModal';
 import { DashboardStatsModal } from './components/DashboardStatsModal';
 import { SyncModal } from './components/SyncModal';
-import { Users } from 'lucide-react';
+import { Users, ArrowRightLeft } from 'lucide-react';
 
 export default function App() {
   const [network, setNetwork] = useState<NetworkGraphData>(() => loadNetwork());
@@ -47,11 +47,38 @@ export default function App() {
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Check URL hash on mount for one-click cross device sync link
+  const [incomingSync, setIncomingSync] = useState<{
+    data: NetworkGraphData;
+    sourceMembersCount: number;
+    sourceRelCount: number;
+  } | null>(null);
+
+  // Check URL hash on mount or hashchange for incoming cross-device sync link
   useEffect(() => {
-    if (window.location.hash.includes('#sync=')) {
-      setIsSyncModalOpen(true);
-    }
+    const handleHashCheck = () => {
+      const hash = window.location.hash;
+      if (hash.includes('#sync=')) {
+        try {
+          const hashToken = hash.split('#sync=')[1];
+          if (!hashToken) return;
+          const rawJson = decodeURIComponent(escape(atob(hashToken)));
+          const parsed = JSON.parse(rawJson);
+          if (parsed.members && Array.isArray(parsed.members) && parsed.relationships) {
+            setIncomingSync({
+              data: parsed,
+              sourceMembersCount: parsed.members.length,
+              sourceRelCount: parsed.relationships.length,
+            });
+          }
+        } catch (err) {
+          console.warn('Failed to parse incoming sync from hash:', err);
+        }
+      }
+    };
+
+    handleHashCheck();
+    window.addEventListener('hashchange', handleHashCheck);
+    return () => window.removeEventListener('hashchange', handleHashCheck);
   }, []);
 
   // Auto-save to localStorage whenever network changes
@@ -293,12 +320,50 @@ export default function App() {
     setIsRelationshipModalOpen(true);
   }, []);
 
-  const handleRestoreData = useCallback((restored: NetworkGraphData) => {
-    setNetwork(restored);
-    const center = restored.members.find((m) => m.isCenter) || restored.members[0];
-    if (center) setCenterMemberId(center.id);
-    setSelectedMemberId(null);
+  const handleImportData = useCallback((data: NetworkGraphData, mode: 'replace' | 'merge' = 'replace') => {
+    if (mode === 'replace') {
+      setNetwork(data);
+      const center = data.members.find((m) => m.isCenter) || data.members[0];
+      if (center) setCenterMemberId(center.id);
+      setSelectedMemberId(null);
+    } else {
+      setNetwork((prev) => {
+        const memberMap = new Map<string, Member>();
+        prev.members.forEach((m) => memberMap.set(m.id, m));
+        data.members.forEach((m) => {
+          if (memberMap.has(m.id)) {
+            const existing = memberMap.get(m.id)!;
+            memberMap.set(m.id, {
+              ...existing,
+              ...m,
+              updatedAt: Math.max(existing.updatedAt || 0, m.updatedAt || Date.now()),
+            });
+          } else {
+            memberMap.set(m.id, m);
+          }
+        });
+
+        const relMap = new Map<string, Relationship>();
+        prev.relationships.forEach((r) => relMap.set(r.id, r));
+        data.relationships.forEach((r) => {
+          relMap.set(r.id, r);
+        });
+
+        return {
+          members: Array.from(memberMap.values()),
+          relationships: Array.from(relMap.values()),
+        };
+      });
+    }
+
+    try {
+      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
+    } catch (_) {}
   }, []);
+
+  const handleRestoreData = useCallback((restored: NetworkGraphData) => {
+    handleImportData(restored, 'replace');
+  }, [handleImportData]);
 
   const handleResetData = useCallback(() => {
     setNetwork(INITIAL_DATA);
@@ -481,8 +546,74 @@ export default function App() {
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
         network={network}
-        onImportData={handleRestoreData}
+        onImportData={handleImportData}
       />
+
+      {/* Incoming Sync Confirmation Dialog (When opened via QR code or shared sync link) */}
+      {incomingSync && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-sky-500/40 p-5 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20 shrink-0">
+                <ArrowRightLeft className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-white">收到跨裝置人際圖譜同步！</h3>
+                <p className="text-xs text-sky-300">偵測到來自其他裝置的圖譜資料</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 text-xs space-y-2">
+              <div className="flex justify-between items-center text-slate-300">
+                <span>傳入成員數：</span>
+                <span className="font-bold text-sky-400">{incomingSync.sourceMembersCount} 位</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span>傳入關係連線：</span>
+                <span className="font-bold text-sky-400">{incomingSync.sourceRelCount} 條</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-400 text-[11px] pt-1 border-t border-slate-800">
+                <span>本機目前資料：</span>
+                <span>{network.members.length} 位成員 · {network.relationships.length} 條關係</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={() => {
+                  handleImportData(incomingSync.data, 'replace');
+                  window.history.replaceState(null, '', window.location.pathname);
+                  setIncomingSync(null);
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow-lg shadow-sky-600/30 transition flex items-center justify-center gap-1.5"
+              >
+                <span>立即完全覆蓋同步 (推薦)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  handleImportData(incomingSync.data, 'merge');
+                  window.history.replaceState(null, '', window.location.pathname);
+                  setIncomingSync(null);
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs border border-slate-700 transition"
+              >
+                <span>智慧合併 (保留本機新加人物)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  window.history.replaceState(null, '', window.location.pathname);
+                  setIncomingSync(null);
+                }}
+                className="w-full py-1.5 text-center text-slate-400 hover:text-slate-200 text-xs transition"
+              >
+                略過並取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
