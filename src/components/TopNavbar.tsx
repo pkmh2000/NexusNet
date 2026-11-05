@@ -74,8 +74,20 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       <header className="h-12 md:h-14 px-3 sm:px-6 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 flex items-center justify-between gap-2 sm:gap-4 z-30 shrink-0 select-none">
         {/* Brand Wordmark (Always visible, uncluttered on mobile) */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20">
-            <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.2]" />
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-sky-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/25 shrink-0 ring-1 ring-white/20">
+            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 sm:w-4.5 sm:h-4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {/* Central Golden Core ("我") */}
+              <circle cx="12" cy="12" r="3" fill="#fbbf24" stroke="#ffffff" strokeWidth="1.5" />
+              {/* Interconnected People Nodes */}
+              <circle cx="5" cy="7" r="2" fill="#38bdf8" />
+              <circle cx="19" cy="7" r="2" fill="#a855f7" />
+              <circle cx="12" cy="20" r="2" fill="#34d399" />
+              {/* Relationship Connections */}
+              <path d="M12 9L5 7" stroke="rgba(255,255,255,0.85)" strokeWidth="1.5" />
+              <path d="M12 9L19 7" stroke="rgba(255,255,255,0.85)" strokeWidth="1.5" />
+              <path d="M12 15L12 18" stroke="rgba(255,255,255,0.85)" strokeWidth="1.5" />
+              <path d="M5 7C7 10 9 12 12 12" stroke="rgba(56,189,248,0.4)" strokeWidth="1" strokeDasharray="1 1" />
+            </svg>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="font-extrabold text-sm sm:text-base tracking-tight text-white whitespace-nowrap">

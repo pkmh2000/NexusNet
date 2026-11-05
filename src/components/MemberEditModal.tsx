@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Member, CustomField } from '../types';
-import { X, UserPlus, Check, Trash2, AlertTriangle } from 'lucide-react';
+import { X, UserPlus, Check, Trash2, AlertTriangle, Calendar, Sparkles } from 'lucide-react';
+import { parseFlexibleBirthday, WESTERN_ZODIAC_LIST } from '../utils/lunarCalendar';
 
 interface MemberEditModalProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
   const [phone, setPhone] = useState('');
   const [company, setCompany] = useState('');
   const [birthday, setBirthday] = useState('');
+  const [birthdayMode, setBirthdayMode] = useState<'full' | 'month_day' | 'year' | 'zodiac' | 'free'>('full');
   const [notes, setNotes] = useState('');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
@@ -55,7 +57,18 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
       setCompany(companyField ? companyField.value : '');
 
       const bdayField = initialMember.customFields?.find((f) => f.type === 'solar_date' || f.type === 'lunar_date');
-      setBirthday(bdayField ? bdayField.value : '');
+      const val = bdayField ? bdayField.value : '';
+      setBirthday(val);
+
+      if (val) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(val)) setBirthdayMode('full');
+        else if (/^\d{1,2}[-/月]\d{1,2}/.test(val)) setBirthdayMode('month_day');
+        else if (/^\d{4}/.test(val)) setBirthdayMode('year');
+        else if (WESTERN_ZODIAC_LIST.some((z) => val.includes(z.name.slice(0, 2)))) setBirthdayMode('zodiac');
+        else setBirthdayMode('free');
+      } else {
+        setBirthdayMode('full');
+      }
     } else {
       setName('');
       setNickname('');
@@ -64,9 +77,14 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
       setPhone('');
       setCompany('');
       setBirthday('');
+      setBirthdayMode('full');
       setNotes('');
     }
   }, [initialMember, isOpen]);
+
+  const birthdayPreview = useMemo(() => {
+    return parseFlexibleBirthday(birthday);
+  }, [birthday]);
 
   if (!isOpen) return null;
 
@@ -217,13 +235,149 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">出生年月日 (支援自動計算農曆與生肖)</label>
-                <input
-                  type="date"
-                  value={birthday}
-                  onChange={(e) => setBirthday(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-100 focus:outline-none focus:border-sky-500"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-400 font-medium">生日 / 星座 / 年次 (選填)</label>
+                  <span className="text-[10px] text-slate-500">可僅記月日、年次或星座</span>
+                </div>
+
+                {/* Quick Mode Pills */}
+                <div className="flex items-center gap-1 mb-2 overflow-x-auto pb-0.5 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBirthdayMode('full');
+                    }}
+                    className={`px-2 py-0.5 rounded-lg border transition ${
+                      birthdayMode === 'full'
+                        ? 'bg-sky-600/30 text-sky-300 border-sky-500/50'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    完整年月日
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBirthdayMode('month_day');
+                    }}
+                    className={`px-2 py-0.5 rounded-lg border transition ${
+                      birthdayMode === 'month_day'
+                        ? 'bg-sky-600/30 text-sky-300 border-sky-500/50'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    僅過生日 (月日)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBirthdayMode('year');
+                    }}
+                    className={`px-2 py-0.5 rounded-lg border transition ${
+                      birthdayMode === 'year'
+                        ? 'bg-sky-600/30 text-sky-300 border-sky-500/50'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    僅知年次
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBirthdayMode('zodiac');
+                    }}
+                    className={`px-2 py-0.5 rounded-lg border transition ${
+                      birthdayMode === 'zodiac'
+                        ? 'bg-sky-600/30 text-sky-300 border-sky-500/50'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    選星座
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBirthdayMode('free');
+                    }}
+                    className={`px-2 py-0.5 rounded-lg border transition ${
+                      birthdayMode === 'free'
+                        ? 'bg-sky-600/30 text-sky-300 border-sky-500/50'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    自由輸入
+                  </button>
+                </div>
+
+                {birthdayMode === 'full' && (
+                  <input
+                    type="date"
+                    value={birthday.match(/^\d{4}-\d{2}-\d{2}$/) ? birthday : ''}
+                    onChange={(e) => setBirthday(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-100 focus:outline-none focus:border-sky-500 text-xs"
+                  />
+                )}
+
+                {birthdayMode === 'month_day' && (
+                  <input
+                    type="text"
+                    placeholder="例如：08-15 或 8月15日 (不需記年份)"
+                    value={birthday}
+                    onChange={(e) => setBirthday(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-100 focus:outline-none focus:border-sky-500 text-xs"
+                  />
+                )}
+
+                {birthdayMode === 'year' && (
+                  <input
+                    type="text"
+                    placeholder="例如：1985 或 1990年次"
+                    value={birthday}
+                    onChange={(e) => setBirthday(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-100 focus:outline-none focus:border-sky-500 text-xs"
+                  />
+                )}
+
+                {birthdayMode === 'zodiac' && (
+                  <select
+                    value={birthday}
+                    onChange={(e) => setBirthday(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-100 focus:outline-none focus:border-sky-500 text-xs"
+                  >
+                    <option value="">請選擇星座...</option>
+                    {WESTERN_ZODIAC_LIST.map((z) => (
+                      <option key={z.name} value={z.name}>
+                        {z.name} {z.symbol} ({z.dateRange})
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {birthdayMode === 'free' && (
+                  <input
+                    type="text"
+                    placeholder="例如：農曆八月十五、秋天生日、約60幾歲..."
+                    value={birthday}
+                    onChange={(e) => setBirthday(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-100 focus:outline-none focus:border-sky-500 text-xs"
+                  />
+                )}
+
+                {/* Live Analysis Preview Badge */}
+                {birthdayPreview && (
+                  <div className="mt-1.5 p-2 rounded-lg bg-sky-950/60 border border-sky-500/30 text-[11px] text-sky-300 flex flex-wrap items-center gap-x-2 gap-y-0.5 animate-in fade-in duration-150">
+                    <span className="font-semibold text-white">{birthdayPreview.displayTitle}</span>
+                    {birthdayPreview.age !== undefined && <span>· {birthdayPreview.age} 歲</span>}
+                    {birthdayPreview.zodiacSign && <span>· {birthdayPreview.zodiacSign}</span>}
+                    {birthdayPreview.chineseAnimal && <span>· {birthdayPreview.chineseAnimal}</span>}
+                    {birthdayPreview.lunarText && <span>· 農曆：{birthdayPreview.lunarText}</span>}
+                    {birthdayPreview.daysLeft !== undefined && (
+                      <span className={birthdayPreview.isToday ? 'text-emerald-400 font-bold' : 'text-amber-300 font-medium'}>
+                        · {birthdayPreview.isToday ? '🎉 今天生日！' : `生日倒數 ${birthdayPreview.daysLeft} 天`}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>

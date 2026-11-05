@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Member, Relationship, CustomField, CustomFieldType, RelationCategory } from '../types';
-import { solarToLunar, getBirthdayCountdown } from '../utils/lunarCalendar';
+import { solarToLunar, getBirthdayCountdown, parseFlexibleBirthday } from '../utils/lunarCalendar';
 import {
   X,
   Plus,
@@ -334,8 +334,7 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
             <div className="space-y-2.5">
               {member.customFields.map((field) => {
                 const isDate = field.type === 'solar_date' || field.type === 'lunar_date';
-                const lunar = isDate ? solarToLunar(field.value) : null;
-                const bday = isDate ? getBirthdayCountdown(field.value) : null;
+                const bdayInfo = isDate ? parseFlexibleBirthday(field.value) : null;
 
                 return (
                   <div
@@ -378,19 +377,25 @@ export const MemberDetailDrawer: React.FC<MemberDetailDrawerProps> = ({
                       )}
                     </div>
 
-                    {/* Automatic Lunar Calendar & Birthday Calculation Badge */}
-                    {isDate && lunar && (
+                    {/* Automatic Flexible Lunar, Zodiac & Birthday Calculation Badge */}
+                    {isDate && bdayInfo && (
                       <div className="mt-2 pt-2 border-t border-slate-800 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
-                        <span className="text-amber-400 font-medium">農曆：{lunar.formattedText}</span>
-                        <span>·</span>
-                        <span>生肖：{lunar.zodiac}</span>
-                        {bday && (
-                          <>
-                            <span>·</span>
-                            <span className={bday.isToday ? 'text-emerald-400 font-bold' : 'text-slate-300'}>
-                              {bday.isToday ? '🎉 今天生日！' : `生日倒數 ${bday.daysLeft} 天 (${bday.age} 歲)`}
-                            </span>
-                          </>
+                        {bdayInfo.lunarText && (
+                          <span className="text-amber-400 font-medium">農曆：{bdayInfo.lunarText}</span>
+                        )}
+                        {bdayInfo.chineseAnimal && (
+                          <span>· 生肖：{bdayInfo.chineseAnimal}</span>
+                        )}
+                        {bdayInfo.zodiacSign && (
+                          <span className="text-sky-300 font-medium">· 星座：{bdayInfo.zodiacSign}</span>
+                        )}
+                        {bdayInfo.age !== undefined && (
+                          <span>· 年齡：{bdayInfo.age} 歲</span>
+                        )}
+                        {bdayInfo.daysLeft !== undefined && (
+                          <span className={bdayInfo.isToday ? 'text-emerald-400 font-bold' : 'text-amber-300 font-medium'}>
+                            · {bdayInfo.isToday ? '🎉 今天生日！' : `生日倒數 ${bdayInfo.daysLeft} 天`}
+                          </span>
                         )}
                       </div>
                     )}

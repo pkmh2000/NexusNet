@@ -1,5 +1,5 @@
-export const APP_VERSION = 'v1.0.4-beta';
-export const APP_BUILD_DATE = '2026-11-04';
+export const APP_VERSION = 'v1.0.5-beta';
+export const APP_BUILD_DATE = '2026-11-05';
 
 export interface ChangelogItem {
   version: string;
@@ -9,6 +9,17 @@ export interface ChangelogItem {
 }
 
 export const APP_CHANGELOG: ChangelogItem[] = [
+  {
+    version: 'v1.0.5-beta',
+    date: '2026-11-05',
+    title: '重大更新：人際網絡專屬質感 Icon、Phone/Pad 專屬新增按鈕、啟動預設1層與彈性生日',
+    features: [
+      '更換專屬 Interpersonal Nexus 品牌圖示：以「中心樞紐我」與環繞人脈節點為核心，全新 App Icon 與頂部品牌圖示全面亮相',
+      'Phone/Pad 專屬「新增成員」快捷入口：手機畫布常駐炫彩懸浮按鈕 (FAB)、Pad 右下角雙操作按鈕、成員名單頂部直達「+ 新增成員」，告別深層選單',
+      '啟動預設「1 層 (一度人脈)」顯示：全新啟動或登入預設只看一度核心朋友圈，未關閉 App 前 session 自動保持最後選擇的層級',
+      '多維度「彈性生日」支援：不再強制輸入西元年月日！支援「僅記月日 (如 08-15)」、「僅知年次 (如 1985)」、「直接選星座 (如 天蠍座)」與自由備註，自動倒數與生肖星座即時聯動',
+    ],
+  },
   {
     version: 'v1.0.4-beta',
     date: '2026-11-04',

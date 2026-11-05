@@ -190,3 +190,154 @@ export function getBirthdayCountdown(dateStr: string): { daysLeft: number; isTod
     age
   };
 }
+
+export interface WesternZodiacInfo {
+  name: string;
+  symbol: string;
+  dateRange: string;
+}
+
+export const WESTERN_ZODIAC_LIST: WesternZodiacInfo[] = [
+  { name: '白羊座', symbol: '♈', dateRange: '03/21 ~ 04/19' },
+  { name: '金牛座', symbol: '♉', dateRange: '04/20 ~ 05/20' },
+  { name: '雙子座', symbol: '♊', dateRange: '05/21 ~ 06/21' },
+  { name: '巨蟹座', symbol: '♋', dateRange: '06/22 ~ 07/22' },
+  { name: '獅子座', symbol: '♌', dateRange: '07/23 ~ 08/22' },
+  { name: '處女座', symbol: '♍', dateRange: '08/23 ~ 09/22' },
+  { name: '天秤座', symbol: '♎', dateRange: '09/23 ~ 10/23' },
+  { name: '天蠍座', symbol: '♏', dateRange: '10/24 ~ 11/22' },
+  { name: '射手座', symbol: '♐', dateRange: '11/23 ~ 12/21' },
+  { name: '摩羯座', symbol: '♑', dateRange: '12/22 ~ 01/19' },
+  { name: '水瓶座', symbol: '♒', dateRange: '01/20 ~ 02/18' },
+  { name: '雙魚座', symbol: '♓', dateRange: '02/19 ~ 03/20' },
+];
+
+export function getWesternZodiac(month: number, day: number): { name: string; symbol: string; dateRange: string } {
+  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return WESTERN_ZODIAC_LIST[0];
+  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return WESTERN_ZODIAC_LIST[1];
+  if ((month === 5 && day >= 21) || (month === 6 && day <= 21)) return WESTERN_ZODIAC_LIST[2];
+  if ((month === 6 && day >= 22) || (month === 7 && day <= 22)) return WESTERN_ZODIAC_LIST[3];
+  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return WESTERN_ZODIAC_LIST[4];
+  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return WESTERN_ZODIAC_LIST[5];
+  if ((month === 9 && day >= 23) || (month === 10 && day <= 23)) return WESTERN_ZODIAC_LIST[6];
+  if ((month === 10 && day >= 24) || (month === 11 && day <= 22)) return WESTERN_ZODIAC_LIST[7];
+  if ((month === 11 && day >= 23) || (month === 12 && day <= 21)) return WESTERN_ZODIAC_LIST[8];
+  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return WESTERN_ZODIAC_LIST[9];
+  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return WESTERN_ZODIAC_LIST[10];
+  return WESTERN_ZODIAC_LIST[11]; // 雙魚座
+}
+
+export function getMonthDayCountdown(month: number, day: number): { daysLeft: number; isToday: boolean } {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  let nextDate = new Date(currentYear, month - 1, day);
+  const today = new Date(currentYear, now.getMonth(), now.getDate());
+
+  if (nextDate.getTime() < today.getTime()) {
+    nextDate = new Date(currentYear + 1, month - 1, day);
+  }
+
+  const diffTime = nextDate.getTime() - today.getTime();
+  const daysLeft = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  return {
+    daysLeft,
+    isToday: daysLeft === 0,
+  };
+}
+
+export interface FlexibleBirthdayResult {
+  kind: 'full' | 'month_day' | 'year' | 'zodiac' | 'text';
+  displayTitle: string;
+  age?: number;
+  daysLeft?: number;
+  isToday?: boolean;
+  zodiacSign?: string;
+  chineseAnimal?: string;
+  lunarText?: string;
+}
+
+/**
+ * 彈性生日解析器：
+ * 支援「完整年月日 (1992-06-18)」、「僅月日 (08-15 / 8月15日)」、「僅年份 (1985 / 74年次)」、「星座 (獅子座)」與自訂農曆文字
+ */
+export function parseFlexibleBirthday(raw: string): FlexibleBirthdayResult | null {
+  if (!raw || !raw.trim()) return null;
+  const str = raw.trim();
+
+  // 1. 完整年月日: YYYY-MM-DD 或 YYYY/MM/DD
+  const fullMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (fullMatch) {
+    const y = parseInt(fullMatch[1], 10);
+    const m = parseInt(fullMatch[2], 10);
+    const d = parseInt(fullMatch[3], 10);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      const countdown = getBirthdayCountdown(`${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+      const lunar = solarToLunar(`${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+      const western = getWesternZodiac(m, d);
+      const animal = ANIMALS[(y - 4) % 12];
+
+      return {
+        kind: 'full',
+        displayTitle: `${y}年${m}月${d}日`,
+        age: countdown?.age,
+        daysLeft: countdown?.daysLeft,
+        isToday: countdown?.isToday,
+        zodiacSign: `${western.name} ${western.symbol}`,
+        chineseAnimal: `屬${animal}`,
+        lunarText: lunar?.formattedText,
+      };
+    }
+  }
+
+  // 2. 僅月日: MM-DD, M/D, MM/DD, 或 M月D日 (如 08-15, 8/15, 8月15日)
+  const monthDayMatch = str.match(/^(?:--)?(\d{1,2})[-/月](\d{1,2})日?$/);
+  if (monthDayMatch) {
+    const m = parseInt(monthDayMatch[1], 10);
+    const d = parseInt(monthDayMatch[2], 10);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      const countdown = getMonthDayCountdown(m, d);
+      const western = getWesternZodiac(m, d);
+
+      return {
+        kind: 'month_day',
+        displayTitle: `${m}月${d}日`,
+        daysLeft: countdown.daysLeft,
+        isToday: countdown.isToday,
+        zodiacSign: `${western.name} ${western.symbol}`,
+      };
+    }
+  }
+
+  // 3. 僅年份: YYYY 或 YYYY年 / YYYY年次
+  const yearMatch = str.match(/^(\d{4})(?:年|年次)?$/);
+  if (yearMatch) {
+    const y = parseInt(yearMatch[1], 10);
+    if (y >= 1900 && y <= 2050) {
+      const nowYear = new Date().getFullYear();
+      const approxAge = nowYear - y;
+      const animal = ANIMALS[(y - 4) % 12];
+      return {
+        kind: 'year',
+        displayTitle: `${y}年次`,
+        age: approxAge,
+        chineseAnimal: `屬${animal}`,
+      };
+    }
+  }
+
+  // 4. 星座名稱: 檢查是否匹配 12 星座之一
+  const foundZodiac = WESTERN_ZODIAC_LIST.find((z) => str.includes(z.name.slice(0, 2)));
+  if (foundZodiac) {
+    return {
+      kind: 'zodiac',
+      displayTitle: `${foundZodiac.name} ${foundZodiac.symbol}`,
+      zodiacSign: `${foundZodiac.name} ${foundZodiac.symbol} (${foundZodiac.dateRange})`,
+    };
+  }
+
+  // 5. 自由文字 (如「農曆八月十五」)
+  return {
+    kind: 'text',
+    displayTitle: str,
+  };
+}

@@ -18,9 +18,11 @@ import { MemberEditModal } from './components/MemberEditModal';
 import { RelationshipModal } from './components/RelationshipModal';
 import { DashboardStatsModal } from './components/DashboardStatsModal';
 import { SyncModal } from './components/SyncModal';
-import { Users, ArrowRightLeft, Rocket } from 'lucide-react';
+import { Users, ArrowRightLeft, Rocket, UserPlus } from 'lucide-react';
 import { decompressNetworkData } from './utils/syncCodec';
 import { useAppUpdate } from './hooks/useAppUpdate';
+
+const SESSION_MAX_LAYERS_KEY = 'nexusnet_session_max_layers';
 
 export default function App() {
   const [network, setNetwork] = useState<NetworkGraphData>(() => loadNetwork());
@@ -31,7 +33,26 @@ export default function App() {
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('force');
   const [canvasMode, setCanvasMode] = useState<CanvasMode>('display'); // 平常預設為顯示模式
-  const [maxLayers, setMaxLayers] = useState<LayerFilter>('all'); // 顯示層級設定：1層 / 2層 / 3層 / 全部
+
+  // 啟動 app (Cold start) 為顯示 1 層 (一度人脈); 未關閉 app 前保持最後狀態 (Session-persisted)
+  const [maxLayers, setMaxLayersState] = useState<LayerFilter>(() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_MAX_LAYERS_KEY);
+      if (saved === '1') return 1;
+      if (saved === '2') return 2;
+      if (saved === '3') return 3;
+      if (saved === 'all') return 'all';
+    } catch (_) {}
+    return 1; // 啟動預設為顯示 1 層 (一度人脈)!
+  });
+
+  const setMaxLayers = useCallback((layer: LayerFilter) => {
+    setMaxLayersState(layer);
+    try {
+      sessionStorage.setItem(SESSION_MAX_LAYERS_KEY, String(layer));
+    } catch (_) {}
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroupFilter, setSelectedGroupFilter] = useState('all');
   const [collapsedBranchMemberIds, setCollapsedBranchMemberIds] = useState<Set<string>>(new Set());
@@ -474,6 +495,10 @@ export default function App() {
           collapsedBranchMemberIds={collapsedBranchMemberIds}
           onToggleCollapseBranches={handleToggleCollapseMemberBranches}
           onResetAllCollapsedBranches={handleResetAllCollapsedBranches}
+          onOpenNewMemberModal={() => {
+            setEditingMember(null);
+            setIsMemberModalOpen(true);
+          }}
         />
 
         {/* Center Canvas Area */}
@@ -504,14 +529,40 @@ export default function App() {
             onResetAllCollapsedBranches={handleResetAllCollapsedBranches}
           />
 
-          {/* Sidebar Trigger Floating Button (Tablet md..lg only; on mobile the bottom bar has dedicated 成員名單 tab) */}
+          {/* Mobile Phone Quick Add Floating Action Button (FAB) - User Requested: Phone 的新增成員在哪 */}
           <button
-            onClick={() => setIsMobileSidebarOpen(true)}
-            className="hidden md:flex lg:hidden absolute bottom-6 right-6 z-20 items-center gap-1.5 p-3 rounded-2xl bg-sky-600 text-white shadow-xl shadow-sky-600/30"
+            onClick={() => {
+              setEditingMember(null);
+              setIsMemberModalOpen(true);
+            }}
+            className="md:hidden fixed bottom-18 right-4 z-20 flex items-center gap-1.5 px-3.5 py-2.5 rounded-full bg-gradient-to-r from-sky-500 to-indigo-600 text-white font-bold text-xs shadow-2xl shadow-sky-500/40 border border-sky-400/40 active:scale-95 transition"
+            title="快速新增人物單元"
           >
-            <Users className="w-5 h-5" />
-            <span className="text-xs font-semibold">成員列表</span>
+            <UserPlus className="w-4 h-4" />
+            <span>新增成員</span>
           </button>
+
+          {/* Tablet (Pad) Quick Actions (md..lg) - User Requested: Pad 的新增成員在哪 */}
+          <div className="hidden md:flex lg:hidden absolute bottom-6 right-6 z-20 items-center gap-2">
+            <button
+              onClick={() => {
+                setEditingMember(null);
+                setIsMemberModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xl shadow-indigo-600/30 transition active:scale-95"
+              title="新增人物單元"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>新增成員</span>
+            </button>
+            <button
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="flex items-center gap-1.5 p-3 rounded-2xl bg-sky-600 text-white shadow-xl shadow-sky-600/30 transition active:scale-95"
+            >
+              <Users className="w-5 h-5" />
+              <span className="text-xs font-semibold">成員列表</span>
+            </button>
+          </div>
         </main>
 
         {/* Right Member Detail Slide-over Panel */}

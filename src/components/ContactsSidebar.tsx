@@ -1,6 +1,6 @@
 import React from 'react';
 import { Member, Relationship, LayerFilter } from '../types';
-import { Users, ChevronRight, Compass, Search, Filter, Layers, X, GitFork, RotateCcw } from 'lucide-react';
+import { Users, ChevronRight, Compass, Search, Filter, Layers, X, GitFork, RotateCcw, Plus } from 'lucide-react';
 
 interface ContactsSidebarProps {
   members: Member[];
@@ -22,6 +22,7 @@ interface ContactsSidebarProps {
   collapsedBranchMemberIds?: Set<string>;
   onToggleCollapseBranches?: (memberId: string) => void;
   onResetAllCollapsedBranches?: () => void;
+  onOpenNewMemberModal?: () => void;
 }
 
 export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
@@ -44,6 +45,7 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
   collapsedBranchMemberIds,
   onToggleCollapseBranches,
   onResetAllCollapsedBranches,
+  onOpenNewMemberModal,
 }) => {
   // Count connections per member
   const connectionCounts = members.reduce<Record<string, number>>((acc, m) => {
@@ -127,14 +129,29 @@ export const ContactsSidebar: React.FC<ContactsSidebarProps> = ({
               <Users className="w-4 h-4 text-sky-400" />
               <span>人際成員 ({filteredMembers.length}/{members.length})</span>
             </div>
-            <button
-              onClick={onCloseMobile}
-              className="lg:hidden flex items-center gap-1 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-700 transition"
-              title="關閉名單"
-            >
-              <X className="w-3.5 h-3.5 text-slate-400" />
-              <span>關閉</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              {onOpenNewMemberModal && (
+                <button
+                  onClick={() => {
+                    onOpenNewMemberModal();
+                    if (window.innerWidth < 1024) onCloseMobile();
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow-md shadow-sky-600/30 transition active:scale-95"
+                  title="新增人際網絡成員單元"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>新增成員</span>
+                </button>
+              )}
+              <button
+                onClick={onCloseMobile}
+                className="lg:hidden flex items-center gap-1 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-700 transition"
+                title="關閉名單"
+              >
+                <X className="w-3.5 h-3.5 text-slate-400" />
+                <span>關閉</span>
+              </button>
+            </div>
           </div>
 
           {/* Active Collapsed Branches Banner & Reset All Button */}
