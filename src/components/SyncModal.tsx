@@ -789,6 +789,38 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                 </div>
               )}
 
+              {/* App Icon Live Preview & Homescreen Diagnostic */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span className="font-bold text-slate-200">手機桌面圖示 (App Icon) 即時檢視</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-semibold">
+                    全彩實體圖檔
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3.5">
+                  <div className="relative w-16 h-16 rounded-2xl overflow-hidden shadow-lg border border-slate-700/80 shrink-0 bg-slate-900">
+                    <img
+                      src="./icon-192.png?v=1.0.6"
+                      alt="NexusNet App Icon"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="space-y-1 text-[11px] text-slate-300">
+                    <div className="font-semibold text-slate-100 flex items-center gap-1.5">
+                      <span>當此處顯示彩色核心圖示：</span>
+                      <span className="text-emerald-400 font-bold">伺服器圖檔已 100% 正確</span>
+                    </div>
+                    <p className="text-slate-400 leading-relaxed text-[10px]">
+                      若重新加入主畫面依然抓到黑塊，是由於手機瀏覽器（Safari/Chrome）將舊圖標暫存在本地磁碟。請刪除桌面圖示後，點選下方「強制刷新」，或在網址最後加上 <code className="text-sky-300">?v=106</code> 重新開啟網頁後再加入主畫面。
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Force Cache Bypass & Reset (For stubborn PWA / iOS cache) */}
               <div className="p-3.5 bg-slate-950/60 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-slate-300">
                 <div className="space-y-0.5">
@@ -797,7 +829,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                     <span>手機 App 卡在舊版？強制繞過快取重整</span>
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    一鍵清空瀏覽器快取儲存空間（CacheStorage），強制重新向伺服器拉取最新代碼。
+                    一鍵清空瀏覽器快取儲存空間（CacheStorage），強制重新向伺服器拉取最新代碼與圖標。
                   </div>
                 </div>
                 <button
@@ -821,7 +853,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText('git add . && git commit -m "Update NexusNet to v1.0.1-beta" && git push');
+                      navigator.clipboard.writeText('git add -A && git commit -m "Update NexusNet to v1.0.6-beta with new app icons" && git push');
                       alert('已複製 Git 部署指令！請在您的本機專案目錄執行終端機指令。');
                     }}
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-mono font-medium flex items-center gap-1.5 transition"
