@@ -1,4 +1,4 @@
-export const APP_VERSION = 'v1.0.6-beta';
+export const APP_VERSION = 'v1.0.7-beta';
 export const APP_BUILD_DATE = '2026-11-05';
 
 export interface ChangelogItem {
@@ -9,6 +9,18 @@ export interface ChangelogItem {
 }
 
 export const APP_CHANGELOG: ChangelogItem[] = [
+  {
+    version: 'v1.0.7-beta',
+    date: '2026-11-05',
+    title: '重大修復：徹底消除「放大白板」與「分段卡在 1/xx」、大方塊分段輪播直覺控制',
+    features: [
+      '徹底解決「放大後變白板」：QR Code 物理極限（2,953 位元組）防護機制上線，自動偵測資料量；若單張超出安全範圍立即智慧導流至分段輪播，畫布永不空白',
+      '全面消除「完整脈絡碼」混淆：核心極速編碼已 100% 包含所有自訂欄位與備註，去除冗餘模式，一鍵直觀切換「單張極速」或「分段輪播」',
+      '解決「分段傳輸卡在 1/xx」：優化單幀容量為 700 字元，片段數從 24 張大幅縮減至 3~6 張大方塊，手機幾秒內即可一次收齊',
+      '全螢幕放大視圖專屬控制列：放大視圖內直接提供「上一張／下一張」、「暫停／播放」與片段進度指示點，展示與掃描更隨心所欲',
+      '接收端相機「實時分段進度條」：畫面上方清楚亮燈已收集片段（如 [✓1] [✓2]），缺哪張清清楚楚，完全不再無所適從',
+    ],
+  },
   {
     version: 'v1.0.6-beta',
     date: '2026-11-05',

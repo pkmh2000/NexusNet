@@ -7,7 +7,7 @@ export const COMPRESSED_PREFIX = 'NNZ:';
  * Splits a compressed token into multi-frame chunks (e.g. for multi-page / animated QR codes).
  * Allows virtually unlimited graph data to be transmitted across chunky, easy-to-scan QR codes!
  */
-export function splitTokenIntoFrames(token: string, maxChunkLen: number = 240): string[] {
+export function splitTokenIntoFrames(token: string, maxChunkLen: number = 700): string[] {
   if (token.length <= maxChunkLen) {
     return [token];
   }

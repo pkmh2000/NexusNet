@@ -39,6 +39,7 @@ export const InAppQRScanner: React.FC<InAppQRScannerProps> = ({
   const [currentZoom, setCurrentZoom] = useState<number>(1);
   const [scanFeedback, setScanFeedback] = useState<{ type: 'success' | 'warn' | 'detecting'; message: string } | null>(null);
   const [isDecodingPhoto, setIsDecodingPhoto] = useState(false);
+  const [chunkProgress, setChunkProgress] = useState<{ collected: number; total: number; missing: number[] } | null>(null);
 
   const streamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<number | null>(null);
@@ -259,10 +260,19 @@ export const InAppQRScanner: React.FC<InAppQRScannerProps> = ({
             const collected = collectedChunksRef.current.size;
             const total = frameInfo.total;
 
+            const missing: number[] = [];
+            for (let i = 1; i <= total; i++) {
+              if (!collectedChunksRef.current.has(i)) {
+                missing.push(i);
+              }
+            }
+
+            setChunkProgress({ collected, total, missing });
+
             if (collected < total) {
               setScanFeedback({
                 type: 'detecting',
-                message: `分段接收中：已收集 ${collected} / ${total} 片段 (${Math.round((collected / total) * 100)}%)，請對準下一張條碼...`,
+                message: `分段接收中：已收集 ${collected} / ${total} 片段 (${Math.round((collected / total) * 100)}%)，請對準第 ${missing.join(', ')} 片段...`,
               });
               if (typeof navigator.vibrate === 'function') {
                 navigator.vibrate(35);
@@ -277,6 +287,7 @@ export const InAppQRScanner: React.FC<InAppQRScannerProps> = ({
               }
               detectedRaw = `${COMPRESSED_PREFIX}${fullTokenPart}`;
               collectedChunksRef.current.clear();
+              setChunkProgress(null);
             }
           }
 
@@ -578,6 +589,52 @@ export const InAppQRScanner: React.FC<InAppQRScannerProps> = ({
           <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center z-25 text-white space-y-2">
             <Loader2 className="w-8 h-8 text-sky-400 animate-spin" />
             <div className="text-xs font-bold text-slate-200">正在解析相片條碼...</div>
+          </div>
+        )}
+
+        {/* Chunked Frame Progress HUD */}
+        {chunkProgress && (
+          <div className="absolute top-16 inset-x-4 z-20 p-2.5 rounded-2xl bg-slate-950/95 border border-amber-500/50 backdrop-blur-md shadow-2xl flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-150">
+            <div className="flex items-center justify-between text-xs text-amber-300 font-bold">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span>分段條碼接收中：已收集 {chunkProgress.collected} / {chunkProgress.total}</span>
+              </span>
+              <span className="text-[11px] font-mono text-slate-300">
+                {Math.round((chunkProgress.collected / chunkProgress.total) * 100)}%
+              </span>
+            </div>
+            {/* Segment chips */}
+            <div className="flex flex-wrap gap-1">
+              {Array.from({ length: chunkProgress.total }, (_, i) => i + 1).map((idx) => {
+                const isCollected = !chunkProgress.missing.includes(idx);
+                return (
+                  <span
+                    key={idx}
+                    className={`flex-1 min-w-[28px] py-1 text-center text-[10px] font-mono font-bold rounded-lg border transition ${
+                      isCollected
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+                        : 'bg-slate-900/80 text-slate-400 border-slate-700/60'
+                    }`}
+                  >
+                    {isCollected ? `✓${idx}` : idx}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="text-[10px] text-slate-400 flex items-center justify-between">
+              <span>{chunkProgress.missing.length > 0 ? `鏡頭請持續對準螢幕，等待第 ${chunkProgress.missing.join(', ')} 片段...` : '所有片段已收齊，正在解包！'}</span>
+              <button
+                onClick={() => {
+                  collectedChunksRef.current.clear();
+                  setChunkProgress(null);
+                  setScanFeedback(null);
+                }}
+                className="text-[10px] text-sky-400 hover:underline"
+              >
+                重設
+              </button>
+            </div>
           </div>
         )}
 
