@@ -896,37 +896,56 @@ export const SyncModal: React.FC<SyncModalProps> = ({
               </div>
 
               {/* Comparison Cards */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Incoming Source */}
-                <div className="p-3.5 bg-slate-900 border border-emerald-500/40 rounded-2xl space-y-1.5 shadow-md">
-                  <div className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>來源新圖譜資料</span>
-                  </div>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-black text-slate-100">{pendingImport.data.members.length}</span>
-                    <span className="text-xs text-slate-400">位成員</span>
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    關係連線：<strong className="text-slate-200">{pendingImport.data.relationships.length}</strong> 條
-                  </div>
-                </div>
+              {(() => {
+                const incomingFieldCount = pendingImport.data.members.reduce((acc, m) => acc + (m.customFields?.length || 0), 0);
+                const incomingNotesCount = pendingImport.data.members.filter((m) => m.notes && m.notes.trim()).length;
+                const localFieldCount = network.members.reduce((acc, m) => acc + (m.customFields?.length || 0), 0);
+                const localNotesCount = network.members.filter((m) => m.notes && m.notes.trim()).length;
 
-                {/* Local Existing */}
-                <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl space-y-1.5">
-                  <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-slate-500" />
-                    <span>目前本機圖譜資料</span>
+                return (
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Incoming Source */}
+                    <div className="p-3.5 bg-slate-900 border border-emerald-500/40 rounded-2xl space-y-1.5 shadow-md">
+                      <div className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>來源新圖譜資料</span>
+                      </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-slate-100">{pendingImport.data.members.length}</span>
+                        <span className="text-xs text-slate-400">位成員</span>
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        關係連線：<strong className="text-slate-200">{pendingImport.data.relationships.length}</strong> 條
+                      </div>
+                      <div className="text-[11px] text-emerald-400/90 pt-0.5 flex flex-wrap items-center gap-1 border-t border-slate-800/80">
+                        <span>詳細欄位：</span>
+                        <strong className="text-emerald-300 font-bold">{incomingFieldCount}</strong> 個自訂欄位
+                        {incomingNotesCount > 0 && <span className="text-slate-400">({incomingNotesCount} 筆備註)</span>}
+                      </div>
+                    </div>
+
+                    {/* Local Existing */}
+                    <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl space-y-1.5">
+                      <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-slate-500" />
+                        <span>目前本機圖譜資料</span>
+                      </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-slate-100">{network.members.length}</span>
+                        <span className="text-xs text-slate-400">位成員</span>
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        關係連線：<strong className="text-slate-200">{network.relationships.length}</strong> 條
+                      </div>
+                      <div className="text-[11px] text-slate-400 pt-0.5 flex flex-wrap items-center gap-1 border-t border-slate-800/80">
+                        <span>詳細欄位：</span>
+                        <strong className="text-slate-300 font-medium">{localFieldCount}</strong> 個自訂欄位
+                        {localNotesCount > 0 && <span className="text-slate-500">({localNotesCount} 筆備註)</span>}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-black text-slate-100">{network.members.length}</span>
-                    <span className="text-xs text-slate-400">位成員</span>
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    關係連線：<strong className="text-slate-200">{network.relationships.length}</strong> 條
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Members Preview */}
               <div className="p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl space-y-1.5">
@@ -973,11 +992,11 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                       <div className="text-xs font-bold text-slate-100 flex items-center gap-2">
                         <span>完全覆蓋本機 (推薦)</span>
                         <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold">
-                          保證完全一致
+                          保證兩端完全一致
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        以接收到的圖譜資料「完全取代」目前本機資料，兩端成員與關係將 100% 同步完全相同。
+                        以接收到的圖譜資料「完全取代」目前本機資料，成員名冊、內部自訂欄位（電話/公司/生日等）與關係連線 100% 同步完全相同。
                       </p>
                     </div>
                   </div>
@@ -1001,11 +1020,14 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                       className="mt-1 accent-sky-500"
                     />
                     <div className="space-y-0.5">
-                      <div className="text-xs font-bold text-slate-100">
-                        智慧合併 (保留本機既有成員)
+                      <div className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                        <span>智慧深度合併 (雙方欄位智慧融合)</span>
+                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/40 font-semibold">
+                          內部資料絕不遺漏
+                        </span>
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        保留本機目前的所有成員與關係，僅將新增加的成員與連線合併進現有圖譜。
+                        深度比對同名與同 ID 成員，智慧融合同一人員的內部自訂欄位（電話、公司、生日、備註等），保留雙方資料與新關係，絕不忽略任何單元內容！
                       </p>
                     </div>
                   </div>

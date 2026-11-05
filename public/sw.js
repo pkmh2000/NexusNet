@@ -1,5 +1,5 @@
-const CACHE_NAME = 'nexusnet-cache-v9-beta';
-const APP_VERSION = 'v1.0.5-beta';
+const CACHE_NAME = 'nexusnet-cache-v10-beta';
+const APP_VERSION = 'v1.0.6-beta';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

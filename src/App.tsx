@@ -8,6 +8,7 @@ import {
   CanvasMode,
   LayerFilter,
   RelationCategory,
+  CustomField,
 } from './types';
 import { loadNetwork, saveNetwork, INITIAL_DATA } from './utils/storage';
 import { TopNavbar } from './components/TopNavbar';
@@ -381,30 +382,189 @@ export default function App() {
       setCollapsedBranchMemberIds(new Set());
     } else {
       setNetwork((prev) => {
-        const memberMap = new Map<string, Member>();
-        prev.members.forEach((m) => memberMap.set(m.id, m));
-        data.members.forEach((m) => {
-          if (memberMap.has(m.id)) {
-            const existing = memberMap.get(m.id)!;
-            memberMap.set(m.id, {
-              ...existing,
-              ...m,
-              updatedAt: Math.max(existing.updatedAt || 0, m.updatedAt || Date.now()),
-            });
-          } else {
-            memberMap.set(m.id, m);
+        // 1. Build lookup index for existing members by ID and normalized Name
+        const existingById = new Map<string, Member>();
+        const existingByName = new Map<string, Member>();
+        prev.members.forEach((m) => {
+          existingById.set(m.id, m);
+          const norm = m.name.trim().toLowerCase();
+          if (norm && !existingByName.has(norm)) {
+            existingByName.set(norm, m);
           }
         });
 
-        const relMap = new Map<string, Relationship>();
-        prev.relationships.forEach((r) => relMap.set(r.id, r));
-        data.relationships.forEach((r) => {
-          relMap.set(r.id, r);
+        // Track member ID remappings when incoming member matches an existing member by name
+        const idRemap = new Map<string, string>();
+        const mergedMembersMap = new Map<string, Member>();
+
+        // Seed with existing members
+        prev.members.forEach((m) => {
+          mergedMembersMap.set(m.id, {
+            ...m,
+            customFields: Array.isArray(m.customFields) ? [...m.customFields] : [],
+          });
+        });
+
+        // Process each incoming member
+        data.members.forEach((incoming) => {
+          const norm = incoming.name.trim().toLowerCase();
+          let matchedExisting: Member | undefined = undefined;
+          let targetId = incoming.id;
+
+          if (existingById.has(incoming.id)) {
+            matchedExisting = existingById.get(incoming.id);
+            targetId = incoming.id;
+          } else if (norm && existingByName.has(norm)) {
+            matchedExisting = existingByName.get(norm);
+            if (matchedExisting) {
+              targetId = matchedExisting.id;
+              idRemap.set(incoming.id, targetId);
+            }
+          }
+
+          if (matchedExisting) {
+            // Member exists on both sides: execute intelligent deep field fusion
+            const current = mergedMembersMap.get(targetId) || matchedExisting;
+            const isIncomingNewer = (incoming.updatedAt || 0) >= (current.updatedAt || 0);
+
+            // A. Deep merge customFields by field name
+            const fieldMap = new Map<string, CustomField>();
+            (current.customFields || []).forEach((f) => {
+              if (f && f.name) {
+                fieldMap.set(f.name.trim().toLowerCase(), { ...f });
+              }
+            });
+
+            (incoming.customFields || []).forEach((inf) => {
+              if (!inf || !inf.name) return;
+              const fKey = inf.name.trim().toLowerCase();
+              if (fieldMap.has(fKey)) {
+                const exField = fieldMap.get(fKey)!;
+                // If incoming has content, update if local is empty OR incoming is newer
+                if (inf.value && inf.value.trim() !== '') {
+                  if (!exField.value || exField.value.trim() === '' || isIncomingNewer) {
+                    fieldMap.set(fKey, {
+                      ...exField,
+                      value: inf.value,
+                      type: inf.type || exField.type,
+                    });
+                  }
+                }
+              } else {
+                // New field discovered from incoming device
+                fieldMap.set(fKey, {
+                  id: inf.id || `cf-${targetId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  name: inf.name,
+                  type: inf.type || 'text',
+                  value: inf.value || '',
+                });
+              }
+            });
+
+            // B. Merge Notes
+            let mergedNotes = current.notes || '';
+            const incomingNotes = (incoming.notes || '').trim();
+            const currentNotes = (current.notes || '').trim();
+            if (incomingNotes) {
+              if (!currentNotes) {
+                mergedNotes = incomingNotes;
+              } else if (currentNotes !== incomingNotes) {
+                if (isIncomingNewer) {
+                  mergedNotes = incomingNotes;
+                } else if (!currentNotes.includes(incomingNotes)) {
+                  mergedNotes = `${currentNotes}\n---\n[同步筆記]: ${incomingNotes}`;
+                }
+              }
+            }
+
+            // C. Merge Group & Nickname & Avatar
+            const mergedGroup =
+              incoming.group && incoming.group !== '一般'
+                ? isIncomingNewer || current.group === '一般'
+                  ? incoming.group
+                  : current.group
+                : current.group;
+
+            const mergedNickname = incoming.nickname
+              ? isIncomingNewer || !current.nickname
+                ? incoming.nickname
+                : current.nickname
+              : current.nickname;
+
+            const mergedAvatarColor = isIncomingNewer
+              ? incoming.avatarColor || current.avatarColor
+              : current.avatarColor;
+
+            const mergedIsCenter = current.isCenter || incoming.isCenter;
+
+            mergedMembersMap.set(targetId, {
+              ...current,
+              name: current.name || incoming.name,
+              nickname: mergedNickname,
+              group: mergedGroup,
+              avatarColor: mergedAvatarColor,
+              avatarUrl: incoming.avatarUrl || current.avatarUrl,
+              isCenter: mergedIsCenter,
+              notes: mergedNotes,
+              customFields: Array.from(fieldMap.values()),
+              updatedAt: Math.max(current.updatedAt || 0, incoming.updatedAt || Date.now(), Date.now()),
+            });
+          } else {
+            // New member from incoming device
+            mergedMembersMap.set(incoming.id, {
+              ...incoming,
+              customFields: Array.isArray(incoming.customFields) ? [...incoming.customFields] : [],
+              notes: incoming.notes || '',
+              updatedAt: incoming.updatedAt || Date.now(),
+            });
+            idRemap.set(incoming.id, incoming.id);
+          }
+        });
+
+        // 2. Intelligently merge relationships (deduplicate by unordered node pair)
+        const relPairMap = new Map<string, Relationship>();
+        prev.relationships.forEach((r) => {
+          const pairKey = [r.sourceId, r.targetId].sort().join(':::');
+          relPairMap.set(pairKey, { ...r });
+        });
+
+        data.relationships.forEach((inR) => {
+          const resolvedSrc = idRemap.get(inR.sourceId) || inR.sourceId;
+          const resolvedTgt = idRemap.get(inR.targetId) || inR.targetId;
+
+          // Ignore invalid self-loops
+          if (resolvedSrc === resolvedTgt) return;
+          // Ensure both endpoints exist in our merged members
+          if (!mergedMembersMap.has(resolvedSrc) || !mergedMembersMap.has(resolvedTgt)) return;
+
+          const pairKey = [resolvedSrc, resolvedTgt].sort().join(':::');
+          if (relPairMap.has(pairKey)) {
+            const existingRel = relPairMap.get(pairKey)!;
+            const updatedRel: Relationship = {
+              ...existingRel,
+              label: inR.label && inR.label !== '關聯' ? inR.label : existingRel.label,
+              category: inR.category && inR.category !== '社交' ? inR.category : existingRel.category,
+              strength: Math.max(existingRel.strength || 1, inR.strength || 1),
+              notes: inR.notes
+                ? existingRel.notes
+                  ? `${existingRel.notes} | ${inR.notes}`
+                  : inR.notes
+                : existingRel.notes,
+            };
+            relPairMap.set(pairKey, updatedRel);
+          } else {
+            relPairMap.set(pairKey, {
+              ...inR,
+              id: inR.id || `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              sourceId: resolvedSrc,
+              targetId: resolvedTgt,
+            });
+          }
         });
 
         return {
-          members: Array.from(memberMap.values()),
-          relationships: Array.from(relMap.values()),
+          members: Array.from(mergedMembersMap.values()),
+          relationships: Array.from(relPairMap.values()),
         };
       });
     }

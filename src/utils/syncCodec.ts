@@ -1,5 +1,5 @@
 import { deflate, inflate } from 'pako';
-import { NetworkGraphData, Member, Relationship } from '../types';
+import { NetworkGraphData, Member, Relationship, CustomField } from '../types';
 
 export const COMPRESSED_PREFIX = 'NNZ:';
 
@@ -117,17 +117,29 @@ export function compressLiteNetworkData(data: NetworkGraphData): {
   const memberIdMap = new Map<string, number>();
   data.members.forEach((m, idx) => memberIdMap.set(m.id, idx));
 
-  // Compact members: [id, name, groupIdx, color, isCenter ? 1 : 0, nickname || '']
-  const mArr = data.members.map((m) => [
-    m.id,
-    m.name,
-    getGroupIdx(m.group || '一般'),
-    m.avatarColor || '#3b82f6',
-    m.isCenter ? 1 : 0,
-    m.nickname || '',
-  ]);
+  // Compact members: [id, name, groupIdx, color, isCenter ? 1 : 0, nickname || '', notes || '', updatedAt || 0, [[fieldName, type, val, id], ...], avatarUrl || '']
+  const mArr = data.members.map((m) => {
+    const cfTuples = (m.customFields || []).map((cf) => [
+      cf.name || '',
+      cf.type || 'text',
+      cf.value || '',
+      cf.id || '',
+    ]);
+    return [
+      m.id,
+      m.name,
+      getGroupIdx(m.group || '一般'),
+      m.avatarColor || '#3b82f6',
+      m.isCenter ? 1 : 0,
+      m.nickname || '',
+      m.notes || '',
+      m.updatedAt || Date.now(),
+      cfTuples,
+      m.avatarUrl || '',
+    ];
+  });
 
-  // Compact relationships: [id, srcIdx, tgtIdx, label, category, strength]
+  // Compact relationships: [id, srcIdx, tgtIdx, label, category, strength, notes || '', createdAt || 0]
   const rArr = data.relationships.map((r) => [
     r.id,
     memberIdMap.has(r.sourceId) ? memberIdMap.get(r.sourceId)! : r.sourceId,
@@ -135,11 +147,13 @@ export function compressLiteNetworkData(data: NetworkGraphData): {
     r.label,
     r.category,
     r.strength,
+    r.notes || '',
+    r.createdAt || Date.now(),
   ]);
 
   const compactPayload = {
     _fmt: 'idx_v2',
-    v: 1,
+    v: 2,
     gd: groupDict,
     m: mArr,
     r: rArr,
@@ -231,8 +245,29 @@ function normalizeParsedGraph(parsed: any): NetworkGraphData {
     
     // Expand members
     const members: Member[] = parsed.m.map((row: any[], idx: number) => {
-      const [id, name, groupIdx, avatarColor, isCenter, nickname] = row;
+      const [
+        id,
+        name,
+        groupIdx,
+        avatarColor,
+        isCenter,
+        nickname,
+        notes,
+        updatedAt,
+        rawFields,
+        avatarUrl,
+      ] = row;
       const groupName = typeof groupIdx === 'number' && groupDict[groupIdx] ? groupDict[groupIdx] : '一般';
+
+      const customFields: CustomField[] = Array.isArray(rawFields)
+        ? rawFields.map((fRow: any[], fIdx: number) => ({
+            id: fRow && fRow[3] ? String(fRow[3]) : `cf-${id || idx}-${fIdx}`,
+            name: fRow && fRow[0] ? String(fRow[0]) : '欄位',
+            type: fRow && fRow[1] ? (fRow[1] as any) : 'text',
+            value: fRow && fRow[2] ? String(fRow[2]) : '',
+          }))
+        : [];
+
       return {
         id: id || `m-${Date.now()}-${idx}`,
         name: name || '成員',
@@ -240,10 +275,11 @@ function normalizeParsedGraph(parsed: any): NetworkGraphData {
         avatarColor: avatarColor || '#3b82f6',
         group: groupName,
         isCenter: !!isCenter,
-        customFields: [],
-        notes: '',
+        customFields,
+        notes: typeof notes === 'string' ? notes : '',
+        avatarUrl: avatarUrl || undefined,
         createdAt: Date.now(),
-        updatedAt: Date.now(),
+        updatedAt: typeof updatedAt === 'number' ? updatedAt : Date.now(),
       };
     });
 
@@ -251,7 +287,7 @@ function normalizeParsedGraph(parsed: any): NetworkGraphData {
 
     // Expand relationships
     const relationships: Relationship[] = parsed.r.map((row: any[], idx: number) => {
-      const [id, srcRef, tgtRef, label, category, strength] = row;
+      const [id, srcRef, tgtRef, label, category, strength, notes, createdAt] = row;
       const sourceId = typeof srcRef === 'number' ? memberIds[srcRef] || String(srcRef) : String(srcRef);
       const targetId = typeof tgtRef === 'number' ? memberIds[tgtRef] || String(tgtRef) : String(tgtRef);
       return {
@@ -261,7 +297,8 @@ function normalizeParsedGraph(parsed: any): NetworkGraphData {
         label: label || '關聯',
         category: category || '社交',
         strength: typeof strength === 'number' ? strength : 3,
-        createdAt: Date.now(),
+        notes: typeof notes === 'string' ? notes : undefined,
+        createdAt: typeof createdAt === 'number' ? createdAt : Date.now(),
       };
     });
 

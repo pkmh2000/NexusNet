@@ -1,4 +1,4 @@
-export const APP_VERSION = 'v1.0.5-beta';
+export const APP_VERSION = 'v1.0.6-beta';
 export const APP_BUILD_DATE = '2026-11-05';
 
 export interface ChangelogItem {
@@ -9,6 +9,17 @@ export interface ChangelogItem {
 }
 
 export const APP_CHANGELOG: ChangelogItem[] = [
+  {
+    version: 'v1.0.6-beta',
+    date: '2026-11-05',
+    title: '重大修復：同步自訂欄位 100% 完整還原 & 智慧深度合併 (Deep Field Fusion)',
+    features: [
+      '修復「同步後單元內部變更未更新」：升級 idx_v2 緊湊編碼協定，完整序列化成員所有自訂欄位（電話、彈性生日、星座、公司、Email、標籤）與個人備註、關係備註，體積極小但達成 100% 無失真傳輸',
+      '升級「智慧深度合併」演算法：比對成員 ID 與姓名，深度融合同一人員的內部自訂欄位（保留雙方新增與更新項目），絕不覆蓋或抹除雙方珍貴資料',
+      '關係連線雙向無序去重：依節點對智慧合併連線屬性（標籤、類別、星級、備註），徹底消除重複連線並自動重對應成員 ID',
+      '同步解析視窗即時統計：解析完成卡片明確顯示「來源圖譜包含 N 個自訂欄位與 M 筆備註」，接收內容一目了然、超安心',
+    ],
+  },
   {
     version: 'v1.0.5-beta',
     date: '2026-11-05',
