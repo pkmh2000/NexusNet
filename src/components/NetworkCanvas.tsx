@@ -17,7 +17,10 @@ import {
   RefreshCw,
   GitFork,
   X,
+  CircleDot,
 } from 'lucide-react';
+
+export type NodeSizePreset = 'compact' | 'medium' | 'large';
 
 interface NetworkCanvasProps {
   members: Member[];
@@ -111,6 +114,37 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   const reheatSimulation = useCallback((intensity = 0.8) => {
     alphaRef.current = Math.max(alphaRef.current, intensity);
   }, []);
+
+  // Node Size Preset (Obsidian 精巧 / 適中標籤 / 清晰大圓)
+  const [nodeSizePreset, setNodeSizePreset] = useState<NodeSizePreset>(() => {
+    const saved = localStorage.getItem('nexus_node_size_preset');
+    if (saved === 'compact' || saved === 'medium' || saved === 'large') return saved;
+    return 'medium';
+  });
+
+  const getNodeRadius = useCallback((isCenter: boolean, degree: number, preset: NodeSizePreset) => {
+    if (preset === 'compact') {
+      // Obsidian graph style: small, sleek dots (Center: 18px, 1-deg: 12px, 2-deg: 9px)
+      return isCenter ? 18 : Math.max(9, 13 - Math.min(2, degree) * 2);
+    }
+    if (preset === 'large') {
+      // Large comfortable circles
+      return isCenter ? 28 : Math.max(16, 22 - Math.min(2, degree) * 3);
+    }
+    // 'medium' (Default optimal): balanced single-character size (Center: 22px, 1-deg: 16px, 2-deg: 13px)
+    return isCenter ? 22 : Math.max(13, 16 - Math.min(2, degree) * 1.5);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_node_size_preset', nodeSizePreset);
+    if (nodesRef.current.size > 0) {
+      nodesRef.current.forEach((node) => {
+        const isCenter = node.id === centerMemberId;
+        node.radius = getNodeRadius(isCenter, node.degree, nodeSizePreset);
+      });
+      reheatSimulation(0.8);
+    }
+  }, [nodeSizePreset, centerMemberId, getNodeRadius, reheatSimulation]);
 
   // Calculate degrees of separation via BFS from centerMemberId
   const degreesMap = useMemo((): Map<string, number> => {
@@ -283,7 +317,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     activeCanvasMembers.forEach((m, idx) => {
       const d = degreesMap.get(m.id) ?? 2;
       const isCenter = m.id === centerMemberId;
-      const radius = isCenter ? 36 : Math.max(22, 32 - Math.min(3, d) * 3);
+      const radius = getNodeRadius(isCenter, d, nodeSizePreset);
 
       if (existing.has(m.id)) {
         const prev = existing.get(m.id)!;
@@ -311,7 +345,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
 
     nodesRef.current = nextMap;
     reheatSimulation(0.85);
-  }, [activeCanvasMembers, degreesMap, centerMemberId, reheatSimulation]);
+  }, [activeCanvasMembers, degreesMap, centerMemberId, nodeSizePreset, getNodeRadius, reheatSimulation]);
 
   // Trigger reheat when switching view modes, layers, relationships, or branch collapse states
   useEffect(() => {
@@ -458,12 +492,9 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
             const dy = t.y - s.y;
             const dist = Math.sqrt(dx * dx + dy * dy) || 1;
             // Prominent relationship strength:
-            // Strength 5 (tightest): 100px target distance, strong pull
-            // Strength 4: 145px
-            // Strength 3: 190px
-            // Strength 2: 235px
-            // Strength 1 (loosest): 280px distance, softer spring
-            const targetDist = 325 - rel.strength * 45;
+            // Scaled according to nodeSizePreset for optimal breathing room
+            const baseDist = nodeSizePreset === 'compact' ? 230 : nodeSizePreset === 'large' ? 300 : 260;
+            const targetDist = baseDist - rel.strength * 35;
             const springK = (0.018 + rel.strength * 0.018) * Math.max(alpha, 0.4);
             const force = (dist - targetDist) * springK;
             const fx = (dx / dist) * force;
@@ -491,6 +522,57 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
             n.x += n.vx;
             n.y += n.vy;
           });
+
+          // Strict Elastic Collision & Non-Penetration Resolution (Obsidian-Style Anti-Overlap)
+          // Guarantees nodes NEVER overlap, especially during drag interactions!
+          const collisionClearance = nodeSizePreset === 'compact' ? 14 : nodeSizePreset === 'large' ? 22 : 18;
+          for (let iter = 0; iter < 2; iter++) {
+            for (let i = 0; i < nodes.length; i++) {
+              const n1 = nodes[i];
+              for (let j = i + 1; j < nodes.length; j++) {
+                const n2 = nodes[j];
+                const dx = n2.x - n1.x;
+                const dy = n2.y - n1.y;
+                const distSq = dx * dx + dy * dy;
+                const minDist = n1.radius + n2.radius + collisionClearance;
+                if (distSq < minDist * minDist) {
+                  const dist = Math.sqrt(distSq) || 0.001;
+                  const overlap = minDist - dist;
+                  const nx = dx / dist;
+                  const ny = dy / dist;
+
+                  if (isDraggingNodeRef.current === n1.id) {
+                    // User is dragging n1 -> firmly push n2 away so they never overlap
+                    n2.x += nx * overlap;
+                    n2.y += ny * overlap;
+                    n2.vx += nx * Math.max(overlap * 0.35, 1.2);
+                    n2.vy += ny * Math.max(overlap * 0.35, 1.2);
+                  } else if (isDraggingNodeRef.current === n2.id) {
+                    // User is dragging n2 -> firmly push n1 away so they never overlap
+                    n1.x -= nx * overlap;
+                    n1.y -= ny * overlap;
+                    n1.vx -= nx * Math.max(overlap * 0.35, 1.2);
+                    n1.vy -= ny * Math.max(overlap * 0.35, 1.2);
+                  } else {
+                    // Mutual push apart between free nodes
+                    const half = overlap * 0.5;
+                    if (n1.id !== centerMemberId) {
+                      n1.x -= nx * half;
+                      n1.y -= ny * half;
+                      n1.vx -= nx * half * 0.15;
+                      n1.vy -= ny * half * 0.15;
+                    }
+                    if (n2.id !== centerMemberId) {
+                      n2.x += nx * half;
+                      n2.y += ny * half;
+                      n2.vx += nx * half * 0.15;
+                      n2.vy += ny * half * 0.15;
+                    }
+                  }
+                }
+              }
+            }
+          }
 
           if (!isDraggingNodeRef.current) {
             alphaRef.current *= 0.95;
@@ -560,6 +642,41 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
               n.y += (targetY - n.y) * 0.15;
             });
           });
+
+          // Concentric mode anti-overlap: prevent nodes on orbital rings from colliding
+          const ringClearance = nodeSizePreset === 'compact' ? 12 : 16;
+          for (let i = 0; i < nodes.length; i++) {
+            const n1 = nodes[i];
+            for (let j = i + 1; j < nodes.length; j++) {
+              const n2 = nodes[j];
+              const dx = n2.x - n1.x;
+              const dy = n2.y - n1.y;
+              const distSq = dx * dx + dy * dy;
+              const minDist = n1.radius + n2.radius + ringClearance;
+              if (distSq < minDist * minDist) {
+                const dist = Math.sqrt(distSq) || 0.001;
+                const overlap = minDist - dist;
+                const nx = dx / dist;
+                const ny = dy / dist;
+                if (isDraggingNodeRef.current === n1.id) {
+                  n2.x += nx * overlap;
+                  n2.y += ny * overlap;
+                } else if (isDraggingNodeRef.current === n2.id) {
+                  n1.x -= nx * overlap;
+                  n1.y -= ny * overlap;
+                } else {
+                  if (n1.id !== centerMemberId) {
+                    n1.x -= nx * overlap * 0.5;
+                    n1.y -= ny * overlap * 0.5;
+                  }
+                  if (n2.id !== centerMemberId) {
+                    n2.x += nx * overlap * 0.5;
+                    n2.y += ny * overlap * 0.5;
+                  }
+                }
+              }
+            }
+          }
 
           if (!isDraggingNodeRef.current) {
             alphaRef.current *= 0.94;
@@ -736,7 +853,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         // Outer glow
         if (isCenter || isSelected || isHovered) {
           ctx.beginPath();
-          ctx.arc(n.x, n.y, n.radius + (isCenter ? 12 : 8), 0, Math.PI * 2);
+          ctx.arc(n.x, n.y, n.radius + (isCenter ? 10 : 6), 0, Math.PI * 2);
           ctx.fillStyle = isCenter
             ? 'rgba(245, 158, 11, 0.22)'
             : isSelected
@@ -748,7 +865,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         // Connecting source pulsing ring in Edit mode
         if (isConnectingSource) {
           ctx.beginPath();
-          ctx.arc(n.x, n.y, n.radius + 10, 0, Math.PI * 2);
+          ctx.arc(n.x, n.y, n.radius + 8, 0, Math.PI * 2);
           ctx.strokeStyle = '#38bdf8';
           ctx.lineWidth = 2.5;
           ctx.stroke();
@@ -761,7 +878,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         ctx.fill();
 
         // Node border ring
-        ctx.lineWidth = isSelected ? 3.5 : isCenter ? 3 : 2;
+        ctx.lineWidth = isSelected ? 3 : isCenter ? 2.5 : 1.5;
         ctx.strokeStyle = isCenter ? '#fbbf24' : isSelected ? '#ffffff' : '#0f172a';
         ctx.stroke();
 
@@ -769,7 +886,10 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = `bold ${isCenter ? 16 : 13}px "Plus Jakarta Sans", sans-serif`;
+        const initialFontSize = isCenter
+          ? (nodeSizePreset === 'compact' ? 12 : nodeSizePreset === 'large' ? 16 : 13)
+          : (nodeSizePreset === 'compact' ? 9.5 : nodeSizePreset === 'large' ? 13 : 11);
+        ctx.font = `bold ${initialFontSize}px "Plus Jakarta Sans", sans-serif`;
         const initial = isCenter ? '★' : n.member.name.charAt(0);
         ctx.fillText(initial, n.x, n.y);
 
@@ -777,25 +897,26 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         if (canvasMode === 'edit' && isHovered) {
           ctx.fillStyle = 'rgba(245, 158, 11, 0.9)';
           ctx.beginPath();
-          ctx.arc(n.x + n.radius * 0.7, n.y - n.radius * 0.7, 7, 0, Math.PI * 2);
+          ctx.arc(n.x + n.radius * 0.7, n.y - n.radius * 0.7, 5, 0, Math.PI * 2);
           ctx.fill();
         }
 
         // Branch collapsed amber badge
         if (collapsedBranchMemberIds?.has(n.id) && !isCenter) {
           ctx.beginPath();
-          ctx.arc(n.x + n.radius * 0.75, n.y - n.radius * 0.75, 6, 0, Math.PI * 2);
+          ctx.arc(n.x + n.radius * 0.75, n.y - n.radius * 0.75, 4.5, 0, Math.PI * 2);
           ctx.fillStyle = '#f59e0b';
           ctx.fill();
           ctx.strokeStyle = '#0f172a';
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.2;
           ctx.stroke();
         }
 
         // Name and category subtitle below node
-        const labelY = n.y + n.radius + 14;
+        const labelOffset = nodeSizePreset === 'compact' ? 10 : 12;
+        const labelY = n.y + n.radius + labelOffset;
 
-        ctx.font = `600 ${isCenter ? 13 : 11}px "Plus Jakarta Sans", sans-serif`;
+        ctx.font = `600 ${isCenter ? 12 : 11}px "Plus Jakarta Sans", sans-serif`;
         ctx.fillStyle = isSelected ? '#ffffff' : '#e2e8f0';
         ctx.shadowColor = '#000000';
         ctx.shadowBlur = 6;
@@ -807,7 +928,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           ctx.fillStyle = '#94a3b8';
           const degreeTag = !isCenter && n.degree < 99 ? ` · ${n.degree}度` : '';
           const foldTag = collapsedBranchMemberIds?.has(n.id) ? ' [折疊外鏈]' : '';
-          ctx.fillText(`${n.member.group}${degreeTag}${foldTag}`, n.x, labelY + 13);
+          ctx.fillText(`${n.member.group}${degreeTag}${foldTag}`, n.x, labelY + 12);
         }
       });
 
@@ -838,6 +959,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     connectingTargetPos,
     activeEdgeId,
     collapsedBranchMemberIds,
+    nodeSizePreset,
   ]);
 
   // Helper to compute distance between point (px, py) and segment (x1, y1)-(x2, y2)
@@ -904,7 +1026,9 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     const hitNode = nodes.find((n) => {
       const dx = world.x - n.x;
       const dy = world.y - n.y;
-      return dx * dx + dy * dy <= (n.radius + 6) * (n.radius + 6);
+      // Generous hit clearance (+8px) for effortless touch/click on compact nodes
+      const hitRadius = n.radius + 8;
+      return dx * dx + dy * dy <= hitRadius * hitRadius;
     });
 
     if (hitNode) {
@@ -1002,7 +1126,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         draggedNode.y = world.y;
         draggedNode.vx = 0;
         draggedNode.vy = 0;
-        reheatSimulation(0.5);
+        reheatSimulation(0.65);
       }
       return;
     }
@@ -1020,7 +1144,8 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     const hit = nodes.find((n) => {
       const dx = world.x - n.x;
       const dy = world.y - n.y;
-      return dx * dx + dy * dy <= n.radius * n.radius;
+      const hitRadius = n.radius + 7;
+      return dx * dx + dy * dy <= hitRadius * hitRadius;
     });
     hoveredNodeIdRef.current = hit ? hit.id : null;
 
@@ -1355,6 +1480,49 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           <Compass className="w-3.5 h-3.5" />
           <span>以他為核心</span>
         </button>
+
+        <div className="w-px h-5 bg-slate-800 mx-1" />
+
+        {/* Node Sizing Preset Controls (Obsidian 精巧 / 適中 / 大圓) */}
+        <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-slate-950 border border-slate-800/80">
+          <span className="text-[10px] text-slate-400 pl-1.5 pr-0.5 hidden sm:inline flex items-center gap-1">
+            <CircleDot className="w-3 h-3 text-sky-400" />
+            <span>節點:</span>
+          </span>
+          <button
+            onClick={() => setNodeSizePreset('compact')}
+            className={`px-2 py-1 rounded text-[11px] font-medium transition ${
+              nodeSizePreset === 'compact'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="精巧點狀 (Obsidian 風格)：節點精巧俐落，適合密集人際網絡，不擁擠"
+          >
+            精巧
+          </button>
+          <button
+            onClick={() => setNodeSizePreset('medium')}
+            className={`px-2 py-1 rounded text-[11px] font-medium transition ${
+              nodeSizePreset === 'medium'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="適中標籤 (推薦最適)：單字適配，圓圈勻稱不遮擋"
+          >
+            適中
+          </button>
+          <button
+            onClick={() => setNodeSizePreset('large')}
+            className={`px-2 py-1 rounded text-[11px] font-medium transition ${
+              nodeSizePreset === 'large'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="清晰大圓：頭像較大"
+          >
+            大圓
+          </button>
+        </div>
       </div>
 
       {/* Selected Edge Action Floating Card */}

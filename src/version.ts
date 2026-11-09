@@ -1,5 +1,5 @@
-export const APP_VERSION = 'v1.0.7-beta';
-export const APP_BUILD_DATE = '2026-11-05';
+export const APP_VERSION = 'v1.0.8-beta';
+export const APP_BUILD_DATE = '2026-11-09';
 
 export interface ChangelogItem {
   version: string;
@@ -9,6 +9,17 @@ export interface ChangelogItem {
 }
 
 export const APP_CHANGELOG: ChangelogItem[] = [
+  {
+    version: 'v1.0.8-beta',
+    date: '2026-11-09',
+    title: '重大體驗優化：節點防重疊硬碰撞物理機制 & Obsidian 風格適度縮小節點尺寸',
+    features: [
+      '解決「拖曳節點重疊」問題：導入 Obsidian / D3 規格之「硬碰撞防穿透算法 (Elastic Non-Penetration Collision)」，拖曳時路徑上的其他節點會如磁珠流暢被排斥推開，100% 絕不互相覆蓋重疊',
+      '大幅縮減節點圓圈尺寸：由原先過大的 36/29px 縮減至最適比例（中心 22px、直系 16px、外圍 13px），單字居中勻稱舒適，徹底釋放畫布空間，不再遮蔽連線標籤',
+      '新增「節點尺寸 3 段切換」控制項：畫布控制列可一鍵在「精巧 (Obsidian 點狀風格)」、「適中 (推薦最適)」、「大圓」自由切換，完美適配數十至上百位成員的高密度關係網',
+      '維持極佳觸控判定寬容度（Hit Slop +8px）：即使切換為精巧點狀，手指在手機畫布上依然百發百中、拖曳極度滑順',
+    ],
+  },
   {
     version: 'v1.0.7-beta',
     date: '2026-11-05',
